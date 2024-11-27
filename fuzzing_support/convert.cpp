@@ -8,41 +8,41 @@
 #include <vector>
 #include <unordered_map>
 
-// C++ 接口 ------------------------------------------------------------------- start
-#define FUNC_ID_LEN 256
+// definition of the binary used to store CFG ------------------------------------------- start
+#define FUNCNAME_LEN 256
 
-// CFG 结构体只需要在 cfg.txt 中解析获取
-// CYHNO_TE: 这里需要一个二进制文件
+// function_name: name of the function
+// entry: entry block's BBID
+// exit: exit block's BBID
 typedef struct CFG {
-  // int funcID;  funcID 就是 CFG 在 cfg_arr 中的下标索引
-  char function_name[FUNC_ID_LEN];  // 函数的字符串形式，整数形式就是 cfg_arr 的下标
+  char function_name[FUNCNAME_LEN];  // 函数的字符串形式，整数形式就是 cfg_arr 的下标
   int entry;                        // 整数，表示函数入点 block
   int exit;                         // 整数，表示函数出点 block
 } CFG;
 
-// calls 需要 processed_mapping_table.txt 中获取
-// successor_size 从 cfg.txt 中获取
-// successors_arr 从 cfg.txt 中获取
-// CYHNO_TE: 这里需要一个二进制文件
+// calls: -1 represents not calling functions. -2 represents call library functions. >=0 represents called functions' ID
+// successor_size: represents the number of successors of this block
+// successors_arr: the array of successors
 typedef struct BlockEntry {
-  // int bbID;    基本块ID 就是在 block_arr 中的下标索引
-  int calls;                   // -1 时，表示没有调用任何函数；非负数时，表示调用的函数的 funcID，也就是在 cfg_arr 中的下标索引
-  int successor_size;          // 表示这个基本块拥有的 successors 数量
-  int *successors_arr;         // 这个基本块的 successors_arr 数组
+  int calls;                   
+  int successor_size;
+  int *successors_arr;         
 } BlockEntry;
 
-// cfg_size 只需要过一遍 function_list.txt 即可，内存也那样分配就好
-// block_size 只需要过一遍 processed_mapping_table.txt 即可，内存也那样分配就好
-// CYHNO_TE: 这是顶层结构体
-// CYHNO_TE: 这里需要一个二进制文件
+// WENOTE: this is the Top_Level of CFG-stored binary
+// cfg_size: the number of cfg/functions in PUT
+// cfg_arr: the array of cfgs. Indexes of cfg_arr is funcID.
+// block_size: the total number of blocks in PUT
+// block_arr: the array of blocks. Indexes of block_arr is BBID. NULL represents corresponding block is not in PUT
 typedef struct Top_Level {
-  int cfg_size;           // cfg 的数量
-  CFG *cfg_arr;           // cfg 数组
-  int block_size;         // blocks 总数
-  BlockEntry **block_arr;  // block 数组
+  int cfg_size;          
+  CFG *cfg_arr;          
+  int block_size;         
+  BlockEntry **block_arr;  
 } Top_Level;
-// C++ 接口 ------------------------------------------------------------------- end
+// definition of the binary used to store CFG ------------------------------------------- end
 
+// functions used to debug CFG-stored binary ---------------------------------------------------------- start
 void dump_block(BlockEntry *block) {
     std::cout << "block->calls = " << block->calls << std::endl;
     std::cout << "block->successor_size = " << block->successor_size << std::endl;
@@ -71,21 +71,25 @@ void dump_top(Top_Level *top) {
         }
     }
 }
+// functions used to debug CFG-stored binary ---------------------------------------------------------- end
 
 void store_top(Top_Level *top);
 
-// 去除字符串首尾的空白字符
+// Remove leading and trailing whitespace characters from a string.
 std::string trim(const std::string& str) {
+    // find the pos of the first non-whitespace-char
     size_t first = str.find_first_not_of(" \t\n\r");
+    // find the pos of the last non-whitespace-char
     size_t last = str.find_last_not_of(" \t\n\r");
+    // if there is no non-whitespace-char
     if (first == std::string::npos || last == std::string::npos) {
         return "";
     }
+    // else, return str[first : last]
     return str.substr(first, last - first + 1);
 }
 
 int main() {
-
     // 0. 一个顶层，收集完数据后要被 dump 出去
     Top_Level top;
 
