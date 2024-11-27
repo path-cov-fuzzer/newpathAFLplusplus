@@ -13,7 +13,7 @@
 
 // function_name: name of the function
 // entry: entry block's BBID
-// exit: exit block's BBID
+// exit: exit block's BBID (ignore)
 typedef struct CFG {
   char function_name[FUNCNAME_LEN];  // 函数的字符串形式，整数形式就是 cfg_arr 的下标
   int entry;                        // 整数，表示函数入点 block
@@ -145,191 +145,244 @@ int main() {
     top.block_arr = (BlockEntry **) malloc(sizeof(BlockEntry *) * numBB);
     memset(top.block_arr, 0, sizeof(BlockEntry *) * numBB);
 
-    // 2. 构建一个 function_name -> integer 的映射 (需要读取 function_list.txt，原因后续填满 BasicBlock 需要使用)
-    // 同时给 cfg_arr 分配内存空间
-    std::unordered_map<std::string, int> funcname_int;
+    // 1. construct a mapping <funcname, funcIntegerID> using function_list.txt
+    // 2. get the total number of functions to assign memory space for cfg_arr
+    // the mapping data structure
+    std::unordered_map<std::string, int> funcname_funcID;
+    // open function_list.txt
     std::ifstream function_list_file("function_list.txt"); 
-    assert(function_list_file.is_open()); // 检查文件是否成功打开h
+    assert(function_list_file.is_open()); 
+
     std::string line;           
     std::string firstPart;
     std::string secondPart;
+    // read each line of function_list.txt
+    // eachline: funcIntegerID [space] funcName
+    while (std::getline(function_list_file, line)) {  
+        // delete leading/trailing whitespaces
+        std::string input = trim(line);
+        // find the pos of the first space
+        size_t pos = input.find(' ');            
+        assert(pos != std::string::npos);
 
-    while (std::getline(function_list_file, line)) { // 逐行读取文件内容
-        std::string input = line;
-        size_t pos = input.find(' ');            // 查找第一个空格的位置
-        if (pos != std::string::npos) {          // 如果找到了空格
-            firstPart = input.substr(0, pos);    // 提取第一个空格之前的部分
-            secondPart = input.substr(pos + 1);  // 提取第一个空格之后的部分
-        } else {
-            std::cout << "未找到空格" << std::endl;
-        }
+        // get the funcIntegerID
+        firstPart = input.substr(0, pos);   
+        // get the funcName
+        secondPart = input.substr(pos + 1); 
 
-        // 函数名 -> funcid 映射
-        firstPart = trim(firstPart);
-        secondPart = trim(secondPart);
-        funcname_int[secondPart] = std::stoi(firstPart);
+        // construct the mapping
+        funcname_funcID[secondPart] = std::stoi(firstPart);
     }
 
-    // 获取函数的总数，然后给 cfg_arr 分配内存空间
-    int numfunction = std::stoi(firstPart) + 1;
-    top.cfg_size = numfunction;
-    top.cfg_arr = (CFG *) malloc(sizeof(CFG) * numfunction);
+    // total number of functions = "the last funcIntegerID" + 1
+    int numfunctions = std::stoi(firstPart) + 1;
+    // assign memory space for cfg_arr
+    top.cfg_size = numfunctions;
+    top.cfg_arr = (CFG *) malloc(sizeof(CFG) * numfunctions);
+    // close function_list.txt
+    function_list_file.close(); 
 
-    function_list_file.close(); // 关闭文件
+    // reaching here, we already fill TopLevel structure itself
+    // now we need to fill BlockEntry array and CFG array
 
-    // // 下面这段代码用来打印 funcname_int 里的数据
-    // for (const auto& pair : funcname_int) {
-    //     std::cout << "Key: " << pair.first << ", Value: " << pair.second << std::endl;
-    // }
-
-    // 3. 接下来的任务：填充 BlockEntry 数组 的calls属性 -------------------------------------------------------- start
+    // fill BlockEntry array's "calls" ---------------------------------------------------------------------------- start 
+    // open callmap_filtered.txt
     std::ifstream callmap_file("callmap_filtered.txt"); 
-    line = "";
     assert(callmap_file.is_open()); // 检查文件是否成功打开
-    while (std::getline(callmap_file, line)) {  // 逐行读取文件内容
+    // read each line
+    // eachline: BlockIntegerID [space] Calls [space] [FuncName]
+    // or
+    //           BlockIntegerID (if this block doest not call functions)
+    line = "";
+    while (std::getline(callmap_file, line)) {  
+        // remove leading/trailing whitespaces
         std::string input = trim(line);
-        size_t pos = input.find(' ');            // 查找第一个空格的位置
-        if (pos != std::string::npos) {          // 如果找到了空格
-            firstPart = input.substr(0, pos);    // 提取第一个空格之前的部分
-            secondPart = input.substr(pos + 1);  // 提取第一个空格之后的部分
-        } else {
-            // 未找到空格说明这个基本块号不是 call 基本块
-            // 此时，input 本身就是 first part(BBID)
+        // get the pos of the first space
+        size_t pos = input.find(' ');            
+        // if space is found, then this is a calling block
+        if (pos != std::string::npos) {          
+            // get block ID
+            firstPart = input.substr(0, pos);    
+            // get "Calls [FuncName]"
+            secondPart = input.substr(pos + 1);  
+        }
+        else {
+            // get block ID
             firstPart = input;
             secondPart = "";
         }
 
+        // assign memory space to corresponding index in BlockEntry* array.
         top.block_arr[std::stoi(firstPart)] = (BlockEntry *) malloc(sizeof(BlockEntry));
 
-        size_t found = secondPart.find("Calls");   
+        // get the pos of "Call" in the secondPart
+        size_t foundCall = secondPart.find("Calls");   
 
-        if (found != std::string::npos) {  
+        // if "Call" found in secondPart, this block is a calling block
+        if (foundCall != std::string::npos) {  
+            // get the callee funcName
             size_t pos = secondPart.find("Calls ");  
             assert(pos != std::string::npos);
-            std::string result = secondPart.substr(pos + std::strlen("Calls "));  
-            // std::cout << result << std::endl; 
-            result = trim(result);
+            std::string funcName = secondPart.substr(pos + std::strlen("Calls "));  
 
-            if (funcname_int.count(result) > 0) {
-                top.block_arr[std::stoi(firstPart)]->calls = funcname_int[result];
+            // if funcName exits in function_list.txt, it means this is a function defined by PUT itself
+            if (funcname_funcID.count(funcName) > 0) {
+                top.block_arr[std::stoi(firstPart)]->calls = funcname_funcID[funcName];
             } else {
-                top.block_arr[std::stoi(firstPart)]->calls = -2; // -2 表示是 C 库函数
+                // else, it means this function is a C libray function or a system call API
+                top.block_arr[std::stoi(firstPart)]->calls = -2; 
             }
-            // std::cout << "The string contains the word 'calls'." << std::endl;  
         } else {  
+            // if "Call" is not found in secondPart, this block is just a normal block
             top.block_arr[std::stoi(firstPart)]->calls = -1; 
         }  
     }
+    // close callmap_filtered.txt
+    callmap_file.close(); 
+    // fill BlockEntry array's "calls" ---------------------------------------------------------------------------- end 
 
-    callmap_file.close(); // 关闭文件
-    // 3. 接下来的任务：填充 BlockEntry 数组 的calls属性 -------------------------------------------------------- end
-
-    // 接下来的任务：填满 CFG 数组 -------------------------------------------------------------------- start 
-    // 第二遍，这一次的目的是填满 cfg_arr (单独读取 cfg.txt 即可) --- doing
-    line = "";           // zekun_processed_mapping_table.txt 的每一行内容
+    // fill CFG array ---------------------------------------------------------------------------------------- start
+    line = "";
     firstPart = "";
     secondPart = "";
-
+    // open cfg_filtered.txt
     std::ifstream cfg_file("cfg_filtered.txt"); 
-
-    int func_id = 0;
-
     assert(cfg_file.is_open());
 
-    bool justGetIn = false;   // 一个 flag，表示是否刚刚进入一个函数，用来寻找 entryblock
-    bool waitForLast = false; // 一个 flag，标识是否在等待一个函数结束，用来寻找 exitblock
-    int exitblockStore = -1;  // 用来储存可能是 exitblock 的整数
-    int curBBID = -1;         // 当前基本块的 BBID
+    int func_id = 0;
+    bool lookingForEntry = false;   
 
-    while (std::getline(cfg_file, line)) { // 逐行读取文件内容
-
-        size_t pos = line.find(' ');            // 查找第一个空格的位置
+    // read each line
+    // 1. Function: FuncName
+    // 2. BasicBLock: blockID
+    // 3. Successors: blockID blockID ...  or empty
+    // 4. just a newline '\n'
+    while (std::getline(cfg_file, line)) { 
+        // remove leading/trailing whitespaces
+        line = trim(line);
+        // find pos of 1st space
+        size_t pos = line.find(' ');            
+        // part before 1st space
         firstPart = line.substr(0, pos);
-        secondPart = line.substr(pos + 1);      // 提取第一个空格之后的部分
+        // part after 1st space
+        secondPart = line.substr(pos + 1);      
 
-        size_t start = line.find_first_not_of(" \t\n\r");
-        size_t end = line.find_last_not_of(" \t\n\r");
-
-        if (start != std::string::npos && end != std::string::npos) {
-            firstPart = firstPart.substr(start, end - start + 1);
-            secondPart = secondPart.substr(start, end - start + 1);
-        }
-
+        // 1. Function: FuncName
+        // firstPart: "Function:"
+        // secondPart: "FuncName:"
         if (firstPart == "Function:") {
-
-            // printf("waitForLast = %d, exitblockStore = %d\n", waitForLast, exitblockStore);
-
-            if (waitForLast) {
-                top.cfg_arr[func_id - 1].exit = exitblockStore;
-                // printf("exitBlock = %d\n", top.cfg_arr[func_id].exit);
-                waitForLast = false;
-            }
-
+            // fill funcName
             strcpy(top.cfg_arr[func_id].function_name, secondPart.c_str());
-            // printf("funcname = %s\n", top.cfg_arr[func_id].function_name);
-            justGetIn = true;
+            // set flag to tell we are looking for entryBlock
+            lookingForEntry = true;
+            // increase FuncID number 
             func_id++;
         }
         else if (firstPart == "BasicBlock:") {
-
-            // std::cout << "secondPart = " << secondPart << std::endl;
-            curBBID = std::stoi(secondPart);
-
-            // printf("func_id = %d, justGetIn = %d, std::stoi(secondPart) = %d\n", func_id, justGetIn, std::stoi(secondPart));
-
-            if(justGetIn) {
+            // 2. BasicBLock: blockID
+            // firstPart: "BasicBlock:"
+            // secondPart: "blockID"
+            // if we are looking for entryBlock, set it
+            if(lookingForEntry) {
                 top.cfg_arr[func_id - 1].entry = std::stoi(secondPart);
-                // printf("entryBlock = %d\n", top.cfg_arr[func_id].entry);
-                justGetIn = false;
+                lookingForEntry = false;
             }
-
-            waitForLast = true;
-            exitblockStore = std::stoi(secondPart);
-
         }
         else if (firstPart == "Successors:") { 
-            // 填满 BlockEntry 的 successor_size 和 successors_arr
-
-            std::vector <std::string> words;
-            std::vector <int> integer_words;
-
-            size_t start = 0, end = 0;
-            while ((end = secondPart.find(' ', start)) != std::string::npos) {
-                words.push_back(secondPart.substr(start, end - start));
-                start = end + 1;
-            }
-            words.push_back(secondPart.substr(start)); // 添加最后一个单词
-            // 把 vector 中的单词字符串转为整数 vector
-            for (const auto& w : words) {
-                if (!w.empty() && w != "Successors:") {
-                    int num = std::stoi(w);
-                    integer_words.push_back(num);
-                }
-            }
-
-            assert(top.block_arr[curBBID]);
-            top.block_arr[curBBID]->successor_size = integer_words.size();
-            top.block_arr[curBBID]->successors_arr = (int *) malloc(sizeof(int) * integer_words.size());
-
-            for(int i = 0; i < integer_words.size(); i++) {
-                top.block_arr[curBBID]->successors_arr[i] = integer_words[i];
-            }
+            // 3. Successors: blockID blockID ...  or empty
+            // firstPart: "Successors:"
+            // secondPart: "blockID blockID ...  or empty"
+            // do nothing, just skip this line
         }
-        // 不需要 else，因为有可能是 "" 空字符串
+        else {
+            // 4. just a newline '\n'
+            // do nothing, read next line
+        }
     }
 
-    top.cfg_arr[func_id - 1].exit = exitblockStore;
     cfg_file.close();
-    // top.cfg_arr[func_id].exit = exitblockStore;
-    // printf("exitBlock = %d\n", top.cfg_arr[func_id].exit);
-    // 接下来的任务：填满 CFG 数组 -------------------------------------------------------------------- end - checked
+    // fill CFG array ---------------------------------------------------------------------------------------- end
 
+    // fill BlockEntry array's successors ---------------------------------------------------------------------------------------- start
+    line = "";
+    firstPart = "";
+    secondPart = "";
+    // open cfg_filtered.txt
+    std::ifstream cfg_file("cfg_filtered.txt"); 
+    assert(cfg_file.is_open());
 
-    // 2. 读取 function_list.txt，构建整个映射表 --------------------------------------------------- end
+    int curBBID = -1;
 
-    // 3. 这里可以尝试 dump top 的 Readable 形式
+    // read each line
+    // 1. Function: FuncName
+    // 2. BasicBLock: blockID
+    // 3. Successors: blockID blockID ...  or empty
+    // 4. just a newline '\n'
+    while (std::getline(cfg_file, line)) { 
+        // remove leading/trailing whitespaces
+        line = trim(line);
+        // find pos of 1st space
+        size_t pos = line.find(' ');            
+        // part before 1st space
+        firstPart = line.substr(0, pos);
+        // part after 1st space
+        secondPart = line.substr(pos + 1);      
+
+        // 1. Function: FuncName
+        // firstPart: "Function:"
+        // secondPart: "FuncName:"
+        if (firstPart == "Function:") {
+            // just skip this line
+        }
+        else if (firstPart == "BasicBlock:") {
+            // 2. BasicBLock: blockID
+            // firstPart: "BasicBlock:"
+            // secondPart: "blockID"
+            curBBID = std::stoi(secondPart);
+        }
+        else if (firstPart == "Successors:") { 
+            // 3. Successors: blockID blockID ...  or empty
+            // firstPart: "Successors:"
+            // secondPart: "blockID blockID ...  or empty"
+            std::vector <std::string> blockID_string_list;
+            std::vector <int> blockID_integer_list;
+
+            // push blockID list (string format) into vector
+            size_t start = 0, end = 0;
+            while ((end = secondPart.find(' ', start)) != std::string::npos) {
+                blockID_string_list.push_back(secondPart.substr(start, end - start));
+                start = end + 1;
+            }
+            blockID_string_list.push_back(secondPart.substr(start)); // add the last blockID
+
+            // convert blockID(string format) vector to blockID(integer format) vector
+            for (const auto& blockID_str : blockID_string_list) {
+                assert(!blockID_str.empty() && blockID_str != "Successors:");
+                int num = std::stoi(blockID_str);
+                blockID_integer_list.push_back(num);
+            }
+
+            // memory space should be assigned when reading callmap.txt
+            assert(top.block_arr[curBBID]);
+            // fill this block's successors' information
+            top.block_arr[curBBID]->successor_size = blockID_integer_list.size();
+            top.block_arr[curBBID]->successors_arr = (int *) malloc(sizeof(int) * blockID_integer_list.size());
+            for(int i = 0; i < blockID_integer_list.size(); i++) {
+                top.block_arr[curBBID]->successors_arr[i] = blockID_integer_list[i];
+            }
+        }
+        else {
+            // 4. just a newline '\n'
+            // do nothing, read next line
+        }
+    }
+
+    cfg_file.close();
+    // fill BlockEntry array's successors ---------------------------------------------------------------------------------------- end
+
+    // dump CFG-binary's readable format
     dump_top(&top);
-    // 3. 这里可以尝试把 top 里的内容储存到二进制文件里
+    // store its content in a file named "top.bin"
     store_top(&top);
 
     return 0;
