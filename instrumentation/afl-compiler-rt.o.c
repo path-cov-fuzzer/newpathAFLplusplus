@@ -1355,13 +1355,19 @@ __attribute__((constructor(0))) void __afl_auto_first(void) {
 
 }  // ptr memleak report is a false positive
 
+// WHATWEADD: The definition of "path_inject_eachbb" ------------------------------- start
+void path_inject_eachbb(int integerBBID) {
+    // just an empty function
+    return;
+}
+// WHATWEADD: The definition of "path_inject_eachbb" ------------------------------- end
+
 /* The following stuff deals with supporting -fsanitize-coverage=trace-pc-guard.
    It remains non-operational in the traditional, plugin-backed LLVM mode.
    For more info about 'trace-pc-guard', see README.llvm.md.
 
    The first function (__sanitizer_cov_trace_pc_guard) is called back on every
    edge (as opposed to every basic block). */
-
 void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
 
   // For stability analysis, if you want to know to which function unstable
