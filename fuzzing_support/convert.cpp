@@ -73,7 +73,48 @@ void dump_top(Top_Level *top) {
 }
 // functions used to debug CFG-stored binary ---------------------------------------------------------- end
 
-void store_top(Top_Level *top);
+// function used to store CFGs-binary on disk ---------------------------------------------------------- start
+void store_top(Top_Level *top) {
+    // The default name of CFG-binary is "top.bin"
+    FILE *file = fopen("top.bin", "wb");
+    assert(file);
+    // write TopLevel structure at the beginning of "top.bin"
+    fwrite(top, sizeof(Top_Level), 1, file);
+    // cfg_arr follows then
+    fwrite(top->cfg_arr, sizeof(CFG) * top->cfg_size, 1, file);
+
+    // count the number of blocks of the PUT
+    int count = 0;
+    for(int i = 0; i < top->block_size; i++) {
+        if(top->block_arr[i]) {
+            count++;
+        }
+    }
+    // the number of blocks follows then
+    fwrite(&count, sizeof(int), 1, file);
+
+    // the contents of all blocks follow then
+    for(int i = 0; i < top->block_size; i++) {
+        if(top->block_arr[i]) {
+            fwrite(&i, sizeof(int), 1, file);
+            fwrite(top->block_arr[i], sizeof(BlockEntry), 1, file);
+        }
+    }
+
+    // successors of each block follow then
+    for(int i = 0; i < top->block_size; i++) {
+        if(top->block_arr[i]) {
+            fwrite(&i, sizeof(int), 1, file);
+            fwrite(top->block_arr[i]->successors_arr, sizeof(int) * top->block_arr[i]->successor_size, 1, file);
+        }
+    }
+
+    // close the file
+    fclose(file);
+    // complete storing
+    printf("Data has been dumped into top.bin\n");
+}
+// function used to store CFGs-binary on disk ---------------------------------------------------------- end
 
 // Remove leading and trailing whitespace characters from a string.
 std::string trim(const std::string& str) {
@@ -90,10 +131,11 @@ std::string trim(const std::string& str) {
 }
 
 int main() {
-    // 0. 一个顶层，收集完数据后要被 dump 出去
+    // the generated binary
     Top_Level top;
 
-    // 1. 读取 bbnum.txt 获知 PUT 的基本块总数，给 top.block_arr 分配空间，并初始化 top.block_arr
+    // read bbnum.txt to know total number of blocks in PUT.
+    // so that we can assign memory space to top.block_arr
     int numBB = -1;
     FILE *file = fopen("bbnum.txt", "r");
     assert(file);
@@ -293,37 +335,3 @@ int main() {
     return 0;
 }
 
-void store_top(Top_Level *top) {
-    FILE *file = fopen("top.bin", "wb");
-    if (file != NULL) {
-        fwrite(top, sizeof(Top_Level), 1, file);
-        fwrite(top->cfg_arr, sizeof(CFG) * top->cfg_size, 1, file);
-
-        int count = 0;
-        for(int i = 0; i < top->block_size; i++) {
-            if(top->block_arr[i]) {
-                count++;
-            }
-        }
-        fwrite(&count, sizeof(int), 1, file);
-
-        for(int i = 0; i < top->block_size; i++) {
-            if(top->block_arr[i]) {
-                fwrite(&i, sizeof(int), 1, file);
-                fwrite(top->block_arr[i], sizeof(BlockEntry), 1, file);
-            }
-        }
-
-        for(int i = 0; i < top->block_size; i++) {
-            if(top->block_arr[i]) {
-                fwrite(&i, sizeof(int), 1, file);
-                fwrite(top->block_arr[i]->successors_arr, sizeof(int) * top->block_arr[i]->successor_size, 1, file);
-            }
-        }
-
-        fclose(file);
-        // printf("Data has been dumped into top.bin\n");
-    } else {
-        perror("Failed to open file for writing");
-    }
-}
