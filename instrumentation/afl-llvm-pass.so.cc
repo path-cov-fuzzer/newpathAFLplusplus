@@ -1287,7 +1287,6 @@ bool AFLCoverage::runOnModule(Module &M) {
                     BBID++; 
 
                     justEnterBlock = false;
-                    continue;
                 }
 
                 // insert path_inject_eachbb(int) functionCall after each call instruction
