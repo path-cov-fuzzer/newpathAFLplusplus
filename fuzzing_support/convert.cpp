@@ -308,8 +308,8 @@ int main() {
     firstPart = "";
     secondPart = "";
     // open cfg_filtered.txt
-    std::ifstream cfg_file("cfg_filtered.txt"); 
-    assert(cfg_file.is_open());
+    std::ifstream cfg_file2("cfg_filtered.txt"); 
+    assert(cfg_file2.is_open());
 
     int curBBID = -1;
 
@@ -318,7 +318,7 @@ int main() {
     // 2. BasicBLock: blockID
     // 3. Successors: blockID blockID ...  or empty
     // 4. just a newline '\n'
-    while (std::getline(cfg_file, line)) { 
+    while (std::getline(cfg_file2, line)) { 
         // remove leading/trailing whitespaces
         line = trim(line);
         // find pos of 1st space
@@ -377,7 +377,7 @@ int main() {
         }
     }
 
-    cfg_file.close();
+    cfg_file2.close();
     // fill BlockEntry array's successors ---------------------------------------------------------------------------------------- end
 
     // dump CFG-binary's readable format
