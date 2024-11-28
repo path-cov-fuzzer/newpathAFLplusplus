@@ -8,108 +8,116 @@ print(f"arg1: {sys.argv[1]}")
 print(f"arg2: {sys.argv[2]}")
 print(f"arg3: {sys.argv[3]}")
 
-# 思考代码：
-# 1.先把整个 cfg.txt 读入内存，按照 {key="第一个基本块的块号", value=[bool: false, "CFG字符串列表"]} 来储存
-# 2.扫描反汇编代码，扫描每个函数
-#     1.如果函数中没有对 path_inject_eachbb 的调用，那说明不是 PUT 源码，下一个函数
-#     2.如果有，那么看第一个 path_inject_eachbb 的参数，随后使用这个参数索引到之前的字典
-#       把字典 value 里对应的 false 设置为 true，随后继续下一个函数，直到扫描完整个反汇编文件
-# 3.扫描一遍之前的字典，把所有 bool = true 的 CFG字符串列表 dump 到 cfg_filtered.txt 里
+# The approach for filtering the CFG.
+# 1. read cfg.txt into memory, stored as a dict {key="BlockID of the first block", value=[false, "CFG text"]}
+# 2. scan PUT_decomp.txt, observe each function:
+#       1. if there is no "path_inject_eachbb", then skip this function
+#       2. if there is "path_inject_eachbb", get the argument of the first "path_inject_eachbb"
+#           then set dict[argument(blockID)][0] = true
+# 3. dump the dict entries if dict[i][0] = true
 
-# 1.先把整个 cfg.txt 读入内存，按照 {key="第一个基本块的块号", value=[bool: false, "CFG字符串列表"]} 来储存
-justEnterFunction = False # 这个flag用来识别每个函数的第一个基本块 entrypoing
+# 1. read cfg.txt into memory, stored as a dict {key="BlockID of the first block", value=[false, "CFG text"]}
+# store all CFGs
+wholeCFG = {}
 with open(sys.argv[1], 'r', encoding='utf-8') as file:
-    wholeCFG = {}
     singleCFG = []
     firstBBID = -1
+    # indicate whether is looking for the first BBID
+    lookingForFirstBBID = False 
     for line in file:
-        # 使用 strip() 去除每行末尾的换行符
+        # remove leading/trailing whitespaces
         line = line.strip()
+        # if nothing left, this is a newline, skip
+        if not line:
+            continue
+
         if "Function: " in line:
-            # 如果 singleCFG 不为空，那么把它放进 wholeCFG 字典里
+            # if singleCFG is not empty, it means we finish recording a CFG, store it to wholeCFG
             if singleCFG:
                 wholeCFG[firstBBID] = [False, singleCFG]
+            # reset singleCFG, and set lookingForFirstBBID
             singleCFG = []
-            justEnterFunction = True
+            lookingForFirstBBID = True
         else:
-            if justEnterFunction:
+            if lookingForFirstBBID:
+                # record 1st BBID
                 match = re.search(r'BasicBlock: (\d+)', line)
                 assert(match)
-                justEnterFunction = False
+                lookingForFirstBBID = False
                 firstBBID = int(match.group(1))
             else:
-                pass
-                # do nothing
-        singleCFG.append(line)
-    file.close()
+                # skip everyline after record 1st BBID
+                pass # do nothing
 
-# 循环结束后，还有最后一个函数的 CFG 没有加入 wholeCFG，现在加进去
+        # record this CFG 
+        singleCFG.append(line)
+
+    file.close()
+# after scanning all lines, there is still one CFG which is not in wholeCFG
+# add it in
 wholeCFG[firstBBID] = [False, singleCFG]
 
-# 2.扫描反汇编代码，扫描每个函数
-#     1.如果函数中没有对 path_inject_eachbb 的调用，那说明不是 PUT 源码，下一个函数
-#     2.如果有，那么看第一个 path_inject_eachbb 的参数，随后使用这个参数索引到之前的字典
-#       把字典 value 里对应的 false 设置为 true，随后继续下一个函数，直到扫描完整个反汇编文件
-justEnterFunction = False # 这个flag用来识别是否在一个函数内
+# 2. scan PUT_decomp.txt, observe each function:
+#       1. if there is no "path_inject_eachbb", then skip this function
+#       2. if there is "path_inject_eachbb", get the argument of the first "path_inject_eachbb"
+#           then set dict[argument(blockID)][0] = true
+# indicate whether is looking for "path_inject_eachbb"
+lookingForInstrumented = False 
 with open(sys.argv[2], 'r', encoding='utf-8') as file:
+    # record last line of the current reading line
+    previousline = None
+    # read each line of PUT_decomp.txt
     for line in file:
-        # 使用 strip() 去除每行末尾的换行符
+        # remove leading/trailing whitespaces
         line = line.strip()
+        # match function head in PUT's decompile result
         funcNameMatch = re.match(r'^[0-9a-fA-F]+ <[^>]+>:', line)
         if funcNameMatch:
-            # if justEnterFunction: 
-                # 若此时 justEnterFunction = True，说明上一个函数中不包含 callq path_inject_eachbb，不做处理直接skip
-                # 若此时 justEnterFunction = False，说明上一个函数中包含 callq path_inject_eachbb 已被找到，不做处理直接skip
-            justEnterFunction = True
-        elif justEnterFunction:
+            # set flag: we are looking for the first 'path_inject_eachbb'
+            lookingForInstrumented = True
+        elif lookingForInstrumented:
             path_inject_match = re.search(r'callq?\s+[0-9a-fA-F]+\s+<path_inject_eachbb>', line)
             if path_inject_match:
-                # 到这里已经找到这个函数的第一个 callq path_inject_eachbb 了，除了重置 justEnterFunction，
-                # 还要对 step1 里得到的字典做相应的处理
-                # 此时，previousline 有两种可能：
+                # find 'callq path_inject_eachbb'
+                # now, here are two possibilities：
                 #     1. xor    %edi,%edi
                 #     2. mov    $0x3208,%edi
-                print('matched!')
+                print("current line == 'path_inject_eachbb' !")
                 xor_match = re.search(r'xor\s+%edi,%edi', previousline)
                 mov_match = re.search(r'mov\s+\$(0x[0-9a-fA-F]+),%edi', previousline)
                 assert(xor_match or mov_match)
                 assert(not (xor_match and mov_match))
                 if xor_match:
-                    # 如果 previousline = xor 汇编指令，path_inject_eachbb 的参数是 0
+                    # if previousline == "xor    %edi,%edi", then arg = 0
                     arg = 0
                 else:
+                    # if previousline == "mov    $0x3208,%edi", then arg = 0x3208
                     arg = int(mov_match.group(1), 16)
                 print(f"arg: {arg}")
+                # set corresponding singleCFG in wholeCFG as True
                 wholeCFG[arg][0] = True
-                justEnterFunction = False
+                # already find the first 'path_inject_eachbb', do not look for it anymore
+                lookingForInstrumented = False
             else:
-                # 如果在函数里还有没有遇到 callq path_inject_eachbb，那么就继续读下一行
+                # if this line is not 'callq path_inject_eachbb', then just skip
                 pass
         else:
-            # 如果既没有匹配到函数头，justEnterFunction = False
-            # 说明这个函数的 第一个callq path_inject_eachbb 已经被找到了
-            # 继续下一行文字，直到进入到下一个函数为止
+            # readching here means the first 'path_inject_eachbb' of this function has been found
+            # just skip this line, until we met next funciton head
             pass
-        # 记录当前行，这一行的目的是在找到 callq path_inject_eachbb 后，寻找这个函数的参数
+        # record this line, so that previousline == "mov    $0x3208,%edi" when line == "callq path_inject_eachbb"
         previousline = line
     file.close()
 
-# # 打印 wholeCFG
-# print(wholeCFG)
-
-# 3.扫描一遍之前的字典，把所有 bool = true 的 CFG字符串列表 dump 到 cfg_filtered.txt 里
-# 打开文件以写入模式（'w'）
+# 3. dump the dict entries if dict[i][0] = true
 with open(sys.argv[3], "w") as file:
     for key, value in wholeCFG.items():
         if value[0]:
             for line in value[1]:
                 file.write(line + "\n")
+            file.write("\n")
     file.close()
 
-
-# xor    %esi,%esi
-#   2038f6:       bf 08 32 00 00          mov    $0x3208,%edi
-#   2038fb:       e8 a0 e4 e0 00          callq  1011da0 <path_inject_eachbb>
 
 
 
