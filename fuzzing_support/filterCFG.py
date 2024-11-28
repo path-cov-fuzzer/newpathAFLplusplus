@@ -1,13 +1,12 @@
 import sys
 import re
 
-# 检查是否传入了足够的参数（至少需要三个参数加上脚本名称）
 assert(len(sys.argv) == 4)
-# 打印第一个、第二个和第三个参数
+
 # python3 filterCFG.py cfg.txt PUT_decomp.txt cfg_filtered.txt
-print(f"参数1: {sys.argv[1]}")
-print(f"参数2: {sys.argv[2]}")
-print(f"参数3: {sys.argv[3]}")
+print(f"arg1: {sys.argv[1]}")
+print(f"arg2: {sys.argv[2]}")
+print(f"arg3: {sys.argv[3]}")
 
 # 思考代码：
 # 1.先把整个 cfg.txt 读入内存，按照 {key="第一个基本块的块号", value=[bool: false, "CFG字符串列表"]} 来储存
