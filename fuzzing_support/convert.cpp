@@ -214,6 +214,8 @@ int main() {
 
         // assign memory space to corresponding index in BlockEntry* array.
         top.block_arr[std::stoi(firstPart)] = (BlockEntry *) malloc(sizeof(BlockEntry));
+        top.block_arr[std::stoi(firstPart)]->successor_size = 0;
+        top.block_arr[std::stoi(firstPart)]->successors_arr = NULL;
 
         // get the pos of "Call" in the secondPart
         size_t foundCall = secondPart.find("Calls");   
@@ -327,6 +329,9 @@ int main() {
         firstPart = line.substr(0, pos);
         // part after 1st space
         secondPart = line.substr(pos + 1);      
+        // if a block does not have successor, then its first part and second part will both be "Successors:"
+        if(secondPart == "Successors:")
+            secondPart = "";
 
         // 1. Function: FuncName
         // firstPart: "Function:"
@@ -343,7 +348,15 @@ int main() {
         else if (firstPart == "Successors:") { 
             // 3. Successors: blockID blockID ...  or empty
             // firstPart: "Successors:"
-            // secondPart: "blockID blockID ...  or empty"
+            // secondPart: "blockID blockID ...  
+            // or 
+            // firstPart: "Successors:"
+            // secondPart: empty
+
+            // if secondPart == "", means this line is "Successors:", just skip
+            if(secondPart == "")
+                continue;
+
             std::vector <std::string> blockID_string_list;
             std::vector <int> blockID_integer_list;
 
@@ -353,6 +366,7 @@ int main() {
                 blockID_string_list.push_back(secondPart.substr(start, end - start));
                 start = end + 1;
             }
+            // push secondPart only when it is not empty
             blockID_string_list.push_back(secondPart.substr(start)); // add the last blockID
 
             // convert blockID(string format) vector to blockID(integer format) vector

@@ -1255,39 +1255,33 @@ bool AFLCoverage::runOnModule(Module &M) {
             std::string FuncName = isFuncStatic ? ("static " + M.getName().str() + "_" + F.getName().str()) : F.getName().str(); 
             writeFile(cfgfile, "Function: %s\n", FuncName.c_str());
 
-            // indicate whether is the first block of the function
-            bool justEnterBlock = true;
             // for loop instrumentation
             for (auto &BB : F) {
-                if(justEnterBlock) {
-                    // instrument path_inject_eachbb(int) at the beginning of this block
-                    // get the first instruction of the block
-                    Instruction* firstInst = &(BB.front());
-                    // skip PHI instruction
-                    while (PHINode *PHI = dyn_cast<PHINode>(firstInst)) {
-                        firstInst = firstInst->getNextNode();
-                    }
-                    // skip LandingPad instruction
-                    while (isa<LandingPadInst>(firstInst)) {
-                        firstInst = firstInst->getNextNode();
-                    }
-                    // Create IRBuilder Object
-                    IRBuilder<> builder(firstInst);
-                    // Create parameters for path_inject_eachbb
-                    std::vector<Value*> args;
-                    args.push_back(builder.getInt32(BBID));
-                    // insert path_inject_eachbb(BBID) functionCall
-                    builder.CreateCall(path_inject_eachbbFunc, args);
-
-                    // write to CFG file and callmap file
-                    writeFile(cfgfile, "BasicBlock: %d\n", BBID);
-                    writeFile(callmapfile, "%d\n", BBID);
-
-                    // increase BBID
-                    BBID++; 
-
-                    justEnterBlock = false;
+                // instrument path_inject_eachbb(int) at the beginning of this block
+                // get the first instruction of the block
+                Instruction* firstInst = &(BB.front());
+                // skip PHI instruction
+                while (PHINode *PHI = dyn_cast<PHINode>(firstInst)) {
+                    firstInst = firstInst->getNextNode();
                 }
+                // skip LandingPad instruction
+                while (isa<LandingPadInst>(firstInst)) {
+                    firstInst = firstInst->getNextNode();
+                }
+                // Create IRBuilder Object
+                IRBuilder<> builder(firstInst);
+                // Create parameters for path_inject_eachbb
+                std::vector<Value*> args;
+                args.push_back(builder.getInt32(BBID));
+                // insert path_inject_eachbb(BBID) functionCall
+                builder.CreateCall(path_inject_eachbbFunc, args);
+
+                // write to CFG file and callmap file
+                writeFile(cfgfile, "BasicBlock: %d\n", BBID);
+                writeFile(callmapfile, "%d\n", BBID);
+
+                // increase BBID
+                BBID++; 
 
                 // insert path_inject_eachbb(int) functionCall after each call instruction
                 for (auto &Inst : BB) {
