@@ -106,6 +106,10 @@ static u8  __afl_area_initial[MAP_INITIAL_SIZE];
 static u8 *__afl_area_ptr_dummy = __afl_area_initial;
 static u8 *__afl_area_ptr_backup = __afl_area_initial;
 
+// WHATWEADD: define pointer of path-shm and its size ----------- start
+u32       *__afl_path_ptr = NULL;
+u32       __afl_path_map_size = PATH_MAP_SIZE;
+// WHATWEADD: define pointer of path-shm and its size ----------- end
 u8        *__afl_area_ptr = __afl_area_initial;
 u8        *__afl_dictionary;
 u8        *__afl_fuzz_ptr;
@@ -354,7 +358,16 @@ static void __afl_map_shm(void) {
   // if we are not running in afl ensure the map exists
   if (!__afl_area_ptr) { __afl_area_ptr = __afl_area_ptr_dummy; }
 
-  char *id_str = getenv(SHM_ENV_VAR);
+  // WHATWEADD: map path-shared-memory in PUT ----------------------------------------------- start
+  // get shmid, which is set by afl-fuzz, and shared by environment variable
+  char *id_str = getenv(PATH_SHM_ENV_VAR);
+  if(id_str) {
+    u32 path_shm_id = atoi(id_str);
+    __afl_path_ptr = (u32 *)shmat(path_shm_id, NULL, 0);
+  }
+  // WHATWEADD: map path-shared-memory in PUT ----------------------------------------------- end
+
+  id_str = getenv(SHM_ENV_VAR);
 
   if (__afl_final_loc) {
 
@@ -786,6 +799,9 @@ static void __afl_unmap_shm(void) {
 #else
 
     shmdt((void *)__afl_area_ptr);
+    // WHATWEADD: unmap path-shm when necessary ------------------ start
+    shmdt((void *)__afl_path_ptr);
+    // WHATWEADD: unmap path-shm when necessary ------------------ end
 
 #endif
 
@@ -1356,9 +1372,41 @@ __attribute__((constructor(0))) void __afl_auto_first(void) {
 }  // ptr memleak report is a false positive
 
 // WHATWEADD: The definition of "path_inject_eachbb" ------------------------------- start
+#include <stdbool.h>
+
+// indicate whether this is the first time invoking "path_inject_eachbb"
+static bool first = true;    
+
 void path_inject_eachbb(int integerBBID) {
-    // just an empty function
-    return;
+    // if NULL == __afl_path_ptr, it means that no any other process apply 
+    // for path-shm,  so we can say this PUT is not being fuzzed. then just return.
+    if(!__afl_path_ptr)
+        return;
+
+    // if this is the first time invoking "path_inject_eachbb", __afl_path_ptr[0] must be zero
+    if(first) {
+        first = false;
+        // assert(__afl_path_ptr[0] == 0);
+        // we cannot use assert, since it will be considered as a crash by afl-fuzz
+        if(__afl_path_ptr[0] != 0) {
+            __afl_path_ptr[0] = 0xfffffff0; 
+            // afl-fuzz asserts __afl_path_ptr[0] cannot be greater than
+            // some value, so afl-fuzz will crash
+            return;
+        }
+    }
+
+    // similar to above
+    // assert(__afl_path_ptr[0] * sizeof(u32) <= __afl_path_map_size - sizeof(u32));
+    if(__afl_path_ptr[0] * sizeof(u32) > __afl_path_map_size - sizeof(u32)) {
+        __afl_path_ptr[0] = 0xfffffff1; 
+        return;
+    }
+
+    // path size increase by 1
+    __afl_path_ptr[0] = __afl_path_ptr[0] + 1;
+    // record path's BBID
+    __afl_path_ptr[__afl_path_ptr[0]] = integerBBID;
 }
 // WHATWEADD: The definition of "path_inject_eachbb" ------------------------------- end
 
