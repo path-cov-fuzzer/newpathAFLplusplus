@@ -76,6 +76,10 @@ void afl_shm_deinit(sharedmem_t *shm) {
 
     unsetenv(SHM_ENV_VAR);
 
+    // WHATWEADD: delete this path-shm corresponding environment variable ----------- start
+    unsetenv(PATH_SHM_ENV_VAR);
+    // WHATWEADD: delete this path-shm corresponding environment variable ----------- end
+
   }
 
 #ifdef USEMMAP
@@ -129,10 +133,17 @@ void afl_shm_deinit(sharedmem_t *shm) {
 
 #else
   shmctl(shm->shm_id, IPC_RMID, NULL);
+  // WHATWEADD: delete path-shm ------------------- start
+  shmctl(shm->path_shm_id, IPC_RMID, NULL);
+  // WHATWEADD: delete path-shm ------------------- end
+
   if (shm->cmplog_mode) { shmctl(shm->cmplog_shm_id, IPC_RMID, NULL); }
 #endif
 
   shm->map = NULL;
+  // WHATWEADD: after removing path-shm, assign pointer to NULL ------- start
+  shm->path_map = NULL;
+  // WHATWEADD: after removing path-shm, assign pointer to NULL ------- end
 
 }
 
@@ -147,6 +158,12 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
 
   shm->map = NULL;
   shm->cmp_map = NULL;
+
+  // WHATWEADD: initialize path-shm pointer and size ---------------- start
+  shm->path_map_size = 0;
+  shm->path_map = NULL;
+  // WHATWEADD: initialize path-shm pointer and size ---------------- end
+
 
 #ifdef USEMMAP
 
@@ -245,6 +262,7 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
 
     }
 
+
     /* map the shared memory segment to the address space of the process */
     shm->cmp_map = mmap(0, sizeof(struct cmp_map), PROT_READ | PROT_WRITE,
                         MAP_SHARED, shm->cmplog_g_shm_fd, 0);
@@ -285,6 +303,16 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
 
   }
 
+  // WHATWEADD: apply for path-shm memory space, similar to above ------------------------------- start 
+  shm->path_map_size = PATH_MAP_SIZE;
+  shm->path_shm_id =
+      shmget(IPC_PRIVATE, shm->path_map_size, IPC_CREAT | IPC_EXCL | DEFAULT_PERMISSION);
+
+  if (shm->path_shm_id < 0) {
+      PFATAL("shmget() failed, try running afl-system-config");
+  }
+  // WHATWEADD: apply for path-shm memory space, similar to above ------------------------------- end 
+
   if (shm->cmplog_mode) {
 
     shm->cmplog_shm_id = shmget(IPC_PRIVATE, sizeof(struct cmp_map),
@@ -312,6 +340,12 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
 
     ck_free(shm_str);
 
+    // WHATWEADD: define an environment variable to transmit path-shm id to PUT, like above ------------ start
+    shm_str = alloc_printf("%d", shm->path_shm_id);
+    setenv(PATH_SHM_ENV_VAR, shm_str, 1);
+    ck_free(shm_str);
+    // WHATWEADD: define an environment variable to transmit path-shm id to PUT, like above ------------ end
+
   }
 
   if (shm->cmplog_mode && !non_instrumented_mode) {
@@ -325,6 +359,9 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
   }
 
   shm->map = shmat(shm->shm_id, NULL, 0);
+  // WHATWEADD: map path-shm into afl-fuzz's address space, like above --------------- start
+  shm->path_map = shmat(shm->path_shm_id, NULL, 0);
+  // WHATWEADD: map path-shm into afl-fuzz's address space, like above --------------- end
 
   if (shm->map == (void *)-1 || !shm->map) {
 
@@ -340,6 +377,23 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
 
   }
 
+  // WHATWEADD: if path_map mapping fails, then delete all shared memory (including edge-shm, path-shm and cmplog-shm) ----- start
+  if (shm->path_map == (void *)-1 || !shm->path_map) {
+
+    shmctl(shm->shm_id, IPC_RMID, NULL);  // do not leak shmem
+    shmctl(shm->path_shm_id, IPC_RMID, NULL);  // do not leak shmem
+
+    if (shm->cmplog_mode) {
+
+      shmctl(shm->cmplog_shm_id, IPC_RMID, NULL);  // do not leak shmem
+
+    }
+
+    PFATAL("shmat() failed");
+
+  }
+  // WHATWEADD: if path_map mapping fails, then delete all shared memory (including edge-shm, path-shm and cmplog-shm) ----- end
+
   if (shm->cmplog_mode) {
 
     shm->cmp_map = shmat(shm->cmplog_shm_id, NULL, 0);
@@ -349,6 +403,10 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
       shmctl(shm->shm_id, IPC_RMID, NULL);  // do not leak shmem
 
       shmctl(shm->cmplog_shm_id, IPC_RMID, NULL);  // do not leak shmem
+
+      // WHATWEADD: if cmplog-shm mapping fails, we need to delete path-shm now ---------------- start
+      shmctl(shm->path_shm_id, IPC_RMID, NULL);  // do not leak shmem
+      // WHATWEADD: if cmplog-shm mapping fails, we need to delete path-shm now ---------------- end
 
       PFATAL("shmat() failed");
 

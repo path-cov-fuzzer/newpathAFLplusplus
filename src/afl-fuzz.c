@@ -107,10 +107,15 @@
 extern u64 time_spent_working;
 #endif
 
+// WENOTE: at_exit() is a function called when afl-fuzz exits
 static void at_exit() {
 
   s32   i, pid1 = 0, pid2 = 0, pgrp = -1;
-  char *list[4] = {SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // char *list[4] = {SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // WHATWEADD: add PATH_SHM_ENV_VAR, to delete this shm when afl-fuzz exits ---------------------- start
+  char *list[5] = {SHM_ENV_VAR, PATH_SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // WHATWEADD: add PATH_SHM_ENV_VAR, to delete this shm when afl-fuzz exits ---------------------- end
+
   char *ptr;
 
   ptr = getenv("__AFL_TARGET_PID2");
@@ -2018,6 +2023,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   get_core_count(afl);
 
+  // WENOTE: atexit: Register a function to be called when `exit' is called. 
   atexit(at_exit);
 
   setup_dirs_fds(afl);
@@ -2485,6 +2491,11 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->argv = use_argv;
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+  // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+  // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+  afl->fsrv.path_trace_bits = afl->shm.path_map;
+  afl->fsrv.path_map_size   = afl->shm.path_map_size;
+  // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
@@ -2537,6 +2548,12 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.map_size = new_map_size;
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+      afl->fsrv.path_trace_bits = afl->shm.path_map;
+      afl->fsrv.path_map_size   = afl->shm.path_map_size;
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
+
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
@@ -2617,6 +2634,12 @@ int main(int argc, char **argv_orig, char **envp) {
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+      afl->fsrv.path_trace_bits = afl->shm.path_map;
+      afl->fsrv.path_map_size   = afl->shm.path_map_size;
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
+
       afl->cmplog_fsrv.trace_bits = afl->fsrv.trace_bits;
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
