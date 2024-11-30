@@ -7,6 +7,7 @@ cd $FUZZER
 # get path_reduction module
 git submodule update --init fuzzing_support/path-cov/
 cd fuzzing_support/path-cov/
+git pull origin master
 cargo build --release
 cp target/release/libpath_reduction.so ../../
 cd -
