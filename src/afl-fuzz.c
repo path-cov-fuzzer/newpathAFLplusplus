@@ -545,9 +545,36 @@ static void fasan_check_afl_preload(char *afl_preload) {
 
 }
 
+// WHATWEADD: include path-reduction related APIs ---------------- start
+#include <path_reduction.h>
+#include <cfgbinary.h>
+
+// path_reducer, global variable, which is used by all code
+PathReducer* path_reducer;
+// WHATWEADD: include path-reduction related APIs ---------------- end
+
 /* Main entry point */
 
 int main(int argc, char **argv_orig, char **envp) {
+
+  // WHATWEADD: loading CFG, get K environment variable, and get path_reducer ------------------------------------- start
+  // Top_Level stores read CFG binary
+  Top_Level *top = NULL;
+  // get path of CFG binary
+  const char* cfg_filepath = getenv("CFG_BIN_FILE");
+  // loading CFG binary
+  printf("loading CFG binary: %s .......\n", cfg_filepath);
+  top = load_top(cfg_filepath);
+  // get K environment variable
+  char *k = getenv("K");
+  int K = 1; // K == 1 by default
+  if (k != NULL) {
+    K = atoi(k);
+  }
+  // get path_reducer
+  printf("generating path reducer .......\n");
+  path_reducer = get_path_reducer(top, K);
+  // WHATWEADD: loading CFG, get K environment variable, and get path_reducer ------------------------------------- end
 
   s32 opt, auto_sync = 0 /*, user_set_cache = 0*/;
   u64 prev_queued = 0;
@@ -3283,6 +3310,15 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
 stop_fuzzing:
+
+  // WHATWEADD: free path reducer and CFG binary ------------------------------ start
+  printf("free path reducer .........\n");
+  free_path_reducer(path_reducer);
+  path_reducer = NULL;
+  printf("free CFG binary .........\n");
+  top_free(top);
+  top = NULL;
+  // WHATWEADD: free path reducer and CFG binary ------------------------------ end
 
   afl->force_ui_update = 1;  // ensure the screen is reprinted
   afl->stop_soon = 1;        // ensure everything is written

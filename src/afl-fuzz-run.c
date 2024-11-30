@@ -38,6 +38,11 @@
 u64 time_spent_working = 0;
 #endif
 
+// WHATWEADD: include path-reduction relative header, and path_reducer global variable ------------- start
+#include <path_reduction.h>
+extern PathReducer* path_reducer;
+// WHATWEADD: include path-reduction relative header, and path_reducer global variable ------------- end
+
 // WHATWEADD: SHA256 corresponding functions, used to convert path to hash for future comparison ----------------- start
 #include <assert.h>
 #include <openssl/sha.h>
@@ -1228,12 +1233,24 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
   // does not care about path if stage is "calibration", "colorization" or "trim"
   if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
 
+    // means the length of the reduced path
+    int out_len = -1;
+    // points to the reduced path
+    BlockID *reduced_path = NULL;
+
     // path length must be greater than 0 
     assert(afl->fsrv.path_trace_bits[0] > 0);
-    // get u32* pointer of path beginning
+
+    // get u32* pointer of the path beginning
     u32 *path_shm_ptr_to_1 = &(afl->fsrv.path_trace_bits[1]);   
+    // path reduction
+    reduced_path = reduce_path1(path_reducer, path_shm_ptr_to_1, afl->fsrv.path_trace_bits[0], 0, &out_len); 
+
+    // reduced_path must be shorter than original path
+    assert(out_len <= afl->fsrv.path_trace_bits[0]);
+
     // hash path
-    sha256(path_shm_ptr_to_1, trace_hash, afl->fsrv.path_trace_bits[0]);
+    sha256(reduced_path, trace_hash, out_len);
 
   }
   // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- end

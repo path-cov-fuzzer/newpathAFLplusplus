@@ -8,39 +8,8 @@
 #include <vector>
 #include <unordered_map>
 
-// definition of the binary used to store CFG ------------------------------------------- start
-#define FUNCNAME_LEN 256
-
-// function_name: name of the function
-// entry: entry block's BBID
-// exit: exit block's BBID (ignore)
-typedef struct CFG {
-  char function_name[FUNCNAME_LEN];  // 函数的字符串形式，整数形式就是 cfg_arr 的下标
-  int entry;                        // 整数，表示函数入点 block
-  int exit;                         // 整数，表示函数出点 block
-} CFG;
-
-// calls: -1 represents not calling functions. -2 represents call library functions. >=0 represents called functions' ID
-// successor_size: represents the number of successors of this block
-// successors_arr: the array of successors
-typedef struct BlockEntry {
-  int calls;                   
-  int successor_size;
-  int *successors_arr;         
-} BlockEntry;
-
-// WENOTE: this is the Top_Level of CFG-stored binary
-// cfg_size: the number of cfg/functions in PUT
-// cfg_arr: the array of cfgs. Indexes of cfg_arr is funcID.
-// block_size: the total number of blocks in PUT
-// block_arr: the array of blocks. Indexes of block_arr is BBID. NULL represents corresponding block is not in PUT
-typedef struct Top_Level {
-  int cfg_size;          
-  CFG *cfg_arr;          
-  int block_size;         
-  BlockEntry **block_arr;  
-} Top_Level;
-// definition of the binary used to store CFG ------------------------------------------- end
+// cfgbinary.h contains structure of CFG binary
+#include <cfgbinary.h>
 
 // functions used to debug CFG-stored binary ---------------------------------------------------------- start
 void dump_block(BlockEntry *block) {
@@ -81,19 +50,21 @@ void store_top(Top_Level *top) {
     // write TopLevel structure at the beginning of "top.bin"
     fwrite(top, sizeof(Top_Level), 1, file);
     // cfg_arr follows then
+    // WENOTE: CFG funcname will not be written, but its OKAY since it is useless
     fwrite(top->cfg_arr, sizeof(CFG) * top->cfg_size, 1, file);
 
-    // count the number of blocks of the PUT
+    // count the number of non-empty blocks of the PUT
     int count = 0;
     for(int i = 0; i < top->block_size; i++) {
         if(top->block_arr[i]) {
             count++;
         }
     }
-    // the number of blocks follows then
+    // write the number of non-empty blocks 
     fwrite(&count, sizeof(int), 1, file);
 
     // the contents of all blocks follow then
+    // WENOTE: sucessors_arr is not written here
     for(int i = 0; i < top->block_size; i++) {
         if(top->block_arr[i]) {
             fwrite(&i, sizeof(int), 1, file);

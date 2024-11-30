@@ -1,3 +1,4 @@
+*.a
 !coresight_mode
 !coresight_mode/coresight-trace
 *.dSYM
