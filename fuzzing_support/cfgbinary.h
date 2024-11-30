@@ -10,9 +10,9 @@
 // entry: entry block's BBID
 // exit: exit block's BBID (ignore)
 typedef struct CFG {
-  char function_name[FUNCNAME_LEN];  // 函数的字符串形式，整数形式就是 cfg_arr 的下标
-  int entry;                        // 整数，表示函数入点 block
-  int exit;                         // 整数，表示函数出点 block
+  char function_name[FUNCNAME_LEN];  
+  int entry;                        
+  int exit;                         
 } CFG;
 
 // calls: -1 represents not calling functions. -2 represents call library functions. >=0 represents called functions' ID
