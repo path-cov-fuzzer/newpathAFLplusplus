@@ -1398,7 +1398,9 @@ void path_inject_eachbb(int integerBBID) {
 
     // similar to above
     // assert(__afl_path_ptr[0] * sizeof(u32) <= __afl_path_map_size - sizeof(u32));
-    if(__afl_path_ptr[0] * sizeof(u32) > __afl_path_map_size - sizeof(u32)) {
+    // to prevent overflow, we use (__afl_path_ptr[0] > __afl_path_map_size/sizeof(u32) - 1)
+    // rather than (__afl_path_ptr[0] * sizeof(u32) > __afl_path_map_size - sizeof(u32))
+    if(__afl_path_ptr[0] > __afl_path_map_size/sizeof(u32) - 1) {
         __afl_path_ptr[0] = 0xfffffff1; 
         return;
     }

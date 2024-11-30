@@ -1202,7 +1202,10 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
   fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
 
   // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- start
-  assert(afl->fsrv.path_trace_bits[0] * sizeof(u32) <= afl->fsrv.path_map_size - sizeof(u32));
+  // to prevent overflow, we use
+  assert(afl->fsrv.path_trace_bits[0] <= afl->fsrv.path_map_size/sizeof(u32) - 1);
+  // rather than
+  // assert(afl->fsrv.path_trace_bits[0] * sizeof(u32) <= afl->fsrv.path_map_size - sizeof(u32));
   // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- end
 
   if (afl->stop_soon) { return 1; }
