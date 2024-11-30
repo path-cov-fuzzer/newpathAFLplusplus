@@ -38,6 +38,22 @@
 u64 time_spent_working = 0;
 #endif
 
+// WHATWEADD: SHA256 corresponding functions, used to convert path to hash for future comparison ----------------- start
+#include <assert.h>
+#include <openssl/sha.h>
+
+// an array used to store SHA256 hash result
+unsigned char trace_hash[SHA256_DIGEST_LENGTH];
+
+// function used to convert path to hash
+void sha256(u32 *data, unsigned char* hash, u32 counter) {
+    SHA256_CTX sha256_ctx;
+    SHA256_Init(&sha256_ctx);
+    SHA256_Update(&sha256_ctx, data, counter * sizeof(u32));
+    SHA256_Final(hash, &sha256_ctx);
+}
+// WHATWEADD: SHA256 corresponding functions, used to convert path to hash for future comparison ----------------- end
+
 /* Execute target application, monitoring for timeouts. Return status
    information. The called program will update afl->fsrv->trace_bits. */
 
@@ -1204,6 +1220,20 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
   // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- start
   assert(afl->fsrv.path_trace_bits[0] * sizeof(u32) <= afl->fsrv.path_map_size - sizeof(u32));
   // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- end
+
+  // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- start
+  // does not care about path if stage is "calibration", "colorization" or "trim"
+  if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
+
+    // path length must be greater than 0 
+    assert(afl->fsrv.path_trace_bits[0] > 0);
+    // get u32* pointer of path beginning
+    u32 *path_shm_ptr_to_1 = &(afl->fsrv.path_trace_bits[1]);   
+    // hash path
+    sha256(path_shm_ptr_to_1, trace_hash, afl->fsrv.path_trace_bits[0]);
+
+  }
+  // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- end
 
   if (afl->stop_soon) { return 1; }
 
