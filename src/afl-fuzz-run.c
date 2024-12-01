@@ -38,6 +38,27 @@
 u64 time_spent_working = 0;
 #endif
 
+// WHATWEADD: include path-reduction relative header, and path_reducer global variable ------------- start
+#include <path_reduction.h>
+extern PathReducer* path_reducer;
+// WHATWEADD: include path-reduction relative header, and path_reducer global variable ------------- end
+
+// WHATWEADD: SHA256 corresponding functions, used to convert path to hash for future comparison ----------------- start
+#include <assert.h>
+#include <openssl/sha.h>
+
+// an array used to store SHA256 hash result
+unsigned char trace_hash[SHA256_DIGEST_LENGTH];
+
+// function used to convert path to hash
+void sha256(u32 *data, unsigned char* hash, u32 counter) {
+    SHA256_CTX sha256_ctx;
+    SHA256_Init(&sha256_ctx);
+    SHA256_Update(&sha256_ctx, data, counter * sizeof(u32));
+    SHA256_Final(hash, &sha256_ctx);
+}
+// WHATWEADD: SHA256 corresponding functions, used to convert path to hash for future comparison ----------------- end
+
 /* Execute target application, monitoring for timeouts. Return status
    information. The called program will update afl->fsrv->trace_bits. */
 
@@ -1192,7 +1213,47 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
 
   }
 
+  // WHATWEADD: set BBID counter to 0 before executing mutant -------- start
+  if(afl->fsrv.path_trace_bits) {
+    afl->fsrv.path_trace_bits[0] = 0;
+  }
+  // WHATWEADD: set BBID counter to 0 before executing mutant -------- end
+
+  // WENOTE: PUT is executed by mutant in "fuzz_run_target"
   fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+
+  // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- start
+  // to prevent overflow, we use
+  assert(afl->fsrv.path_trace_bits[0] <= afl->fsrv.path_map_size/sizeof(u32) - 1);
+  // rather than
+  // assert(afl->fsrv.path_trace_bits[0] * sizeof(u32) <= afl->fsrv.path_map_size - sizeof(u32));
+  // WHATWEADD: BBID counter cannot be greater than (path-shm-size - 1) --------------------------------- end
+
+  // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- start
+  // does not care about path if stage is "calibration", "colorization" or "trim"
+  if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
+
+    // means the length of the reduced path
+    int out_len = -1;
+    // points to the reduced path
+    BlockID *reduced_path = NULL;
+
+    // path length must be greater than 0 
+    assert(afl->fsrv.path_trace_bits[0] > 0);
+
+    // get u32* pointer of the path beginning
+    u32 *path_shm_ptr_to_1 = &(afl->fsrv.path_trace_bits[1]);   
+    // path reduction
+    reduced_path = reduce_path1(path_reducer, path_shm_ptr_to_1, afl->fsrv.path_trace_bits[0], 0, &out_len); 
+
+    // reduced_path must be shorter than original path
+    assert(out_len <= afl->fsrv.path_trace_bits[0]);
+
+    // hash path
+    sha256(reduced_path, trace_hash, out_len);
+
+  }
+  // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- end
 
   if (afl->stop_soon) { return 1; }
 

@@ -29,6 +29,11 @@
   #define NAME_MAX _XOPEN_NAME_MAX
 #endif
 
+// WHATWEADD: hash is compared in this file, so we include corresponding header --------------- start
+#include <openssl/sha.h>
+#include <stdbool.h>
+// WHATWEADD: hash is compared in this file, so we include corresponding header --------------- end
+
 /* Write bitmap to file. The bitmap is useful mostly for the secret
    -B option, to focus a separate fuzzing session on a particular
    interesting input without rediscovering all the others. */
@@ -388,6 +393,10 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   if (new_bits == 2) { strcat(ret, ",+cov"); }
 
+  // WHATWEADD: new_bits == 3 means no new edge but has new path, store seed with "+pat" ---------- start
+  if (new_bits == 3) { strcat(ret, ",+pat"); }
+  // WHATWEADD: new_bits == 3 means no new edge but has new path, store seed with "+pat" ---------- end
+
   if (unlikely(strlen(ret) >= max_description_len))
     FATAL("describe string is too long");
 
@@ -519,6 +528,22 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
       if (unlikely(new_bits)) { classified = 1; }
 
     }
+
+    // WHATWEADD: if path hash is unique, then store this seed ---------------------------------------- start
+    // does not care about path if stage is "calibration", "colorization" or "trim"
+    if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
+        // trace_hash should has been set in common_fuzz_stuff
+        extern unsigned char trace_hash[SHA256_DIGEST_LENGTH];
+        // hashcompare returns true if hash is unique
+        extern bool c_hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]);
+        // tricky: if hashcompare returns true and new_bits == 0, then new_bits = 3, and this seed will then be stored as "+pat"
+        // if hashcompare returns true and new_bits != 0, then this seed will not be stored as "+pat", but its path hash is also stored in hash pool
+        // if hashcompare returns false, then just skip this branch
+        if (c_hashcompare(trace_hash) && new_bits == 0) {
+            new_bits = 3;
+        }
+    }
+    // WHATWEADD: if path hash is unique, then store this seed ---------------------------------------- end
 
     if (likely(!new_bits)) {
 

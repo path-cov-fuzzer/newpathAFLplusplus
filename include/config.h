@@ -404,6 +404,10 @@
 
 #define SHM_ENV_VAR "__AFL_SHM_ID"
 
+// WHATWEADD: an environment variable used to transmit shmid to PUT ----------- start
+#define PATH_SHM_ENV_VAR "__AFL_PATH_SHM_ID"
+// WHATWEADD: an environment variable used to transmit shmid to PUT ----------- end
+
 /* Environment variable used to pass SHM FUZZ ID to the called program. */
 
 #define SHM_FUZZ_ENV_VAR "__AFL_SHM_FUZZ_ID"
@@ -469,6 +473,10 @@
 #else
   #define MAP_INITIAL_SIZE MAP_SIZE
 #endif
+
+// WHATWEADD: path-shm size is 1G ---------- start
+#define PATH_MAP_SIZE (1U << 30) // 1G
+// WHATWEADD: path-shm size is 1G ---------- end
 
 /* Maximum allocator request size (keep well under INT_MAX): */
 
