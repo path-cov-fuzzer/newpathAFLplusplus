@@ -1406,7 +1406,7 @@ void path_inject_eachbb(int integerBBID) {
     }
 
     // path size increase by 1
-    __afl_path_ptr[0] = __afl_path_ptr[0] + 1;
+    __sync_fetch_and_add(&(__afl_path_ptr[0]), 1);
     // record path's BBID
     __afl_path_ptr[__afl_path_ptr[0]] = integerBBID;
 }
