@@ -1257,6 +1257,8 @@ bool AFLCoverage::runOnModule(Module &M) {
 
             // for loop instrumentation
             for (auto &BB : F) {
+                // check that what we simulated above is the same as the BBID it will actually get
+                assert(origBB_and_BBID[&BB] == BBID);
                 // instrument path_inject_eachbb(int) at the beginning of this block
                 // get the first instruction of the block
                 Instruction* firstInst = &(BB.front());
