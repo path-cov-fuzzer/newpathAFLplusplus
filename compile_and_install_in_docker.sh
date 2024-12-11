@@ -1,15 +1,6 @@
 #!/bin/bash -e
 
-# env FUZZER
-pushd $FUZZER
-
-# get path_reduction module
-git submodule update --init fuzzing_support/path-cov/
-pushd fuzzing_support/path-cov/
-git pull origin master
-cargo build --release
-cp target/release/libpath_reduction.so ../../
-popd
+pushd $FUZZER/repo
 
 # generate libhashcompare.a static library
 clang++ -c hashcompare.cpp
@@ -18,14 +9,15 @@ ar rcs libhashcompare.a hashcompare.o
 # -lcrypto: use <openssl/sha.h>
 # -lhashcompare: use hashcompare.cpp
 # -lstdc++: when use gcc/clang link .o files. If some .o files is compiled from C++, then -lstdc++ is necessary to link these files.
-LLVM_CONFIG=llvm-config-17 LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++" make -e -j$(nproc)
+# -lpath_reduction: use libpath_reduction.so
+LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -j$(nproc)
 
 # aflpp_driver is not changed, so its compilation process does not have to change
 export CC=clang
 export CXX=clang++
 export AFL_NO_X86=1
 export PYTHON_INCLUDE=/
-LLVM_CONFIG=llvm-config-17 make -e -C utils/aflpp_driver || exit 1
+LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -C utils/aflpp_driver || exit 1
 
 popd
 
