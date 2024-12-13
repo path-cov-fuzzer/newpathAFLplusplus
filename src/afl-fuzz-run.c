@@ -25,6 +25,7 @@
  */
 
 #include "afl-fuzz.h"
+#include <assert.h>
 #include <sys/time.h>
 #include <signal.h>
 #include <limits.h>
