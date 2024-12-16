@@ -1,10 +1,10 @@
 #include <iostream>
 #include <openssl/sha.h>
-#include <unordered_map>
+#include <unordered_set>
 #include <cassert>
 #include <cstdint>
 
-std::unordered_map<std::string, bool> hashPool;
+std::unordered_set<std::string> hashPool;
 
 bool hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
     // indicate whether this hash is unique
@@ -14,7 +14,7 @@ bool hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
     char hash[2 * SHA256_DIGEST_LENGTH + 1];
     int total_len = 0;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        int written_bytes = snprintf((char *)(&hash[0]) + total_len, 2 * SHA256_DIGEST_LENGTH + 1 - total_len, "%02x", trace_hash[i]);
+        int written_bytes = snprintf((char *)(&(hash[0])) + total_len, 2 * SHA256_DIGEST_LENGTH + 1 - total_len, "%02x", trace_hash[i]);
         total_len += written_bytes;
     }
     hash[2 * SHA256_DIGEST_LENGTH] = '\0';
@@ -24,7 +24,7 @@ bool hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
     // if thehashstr does not exist in hashPool, then it is interesting
     if (hashPool.find(thehashstr) == hashPool.end()) {
         interesting = true;
-        hashPool[thehashstr] = true;
+        hashPool.insert(thehashstr);
     }
 
     // unique hash, return true. duplicate hash, return false

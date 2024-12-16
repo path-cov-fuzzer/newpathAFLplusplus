@@ -280,7 +280,6 @@ bool AFLCoverage::runOnModule(Module &M) {
   /* Setup random() so we get Actually Random(TM) outputs from AFL_R() */
   gettimeofday(&tv, &tz);
   rand_seed = tv.tv_sec ^ tv.tv_usec ^ getpid();
-  rand_seed = 1234;
   AFL_SR(rand_seed);
 
   /* Show a banner */
@@ -1257,6 +1256,8 @@ bool AFLCoverage::runOnModule(Module &M) {
 
             // for loop instrumentation
             for (auto &BB : F) {
+                // check that what we simulated above is the same as the BBID it will actually get
+                assert(origBB_and_BBID[&BB] == BBID);
                 // instrument path_inject_eachbb(int) at the beginning of this block
                 // get the first instruction of the block
                 Instruction* firstInst = &(BB.front());
