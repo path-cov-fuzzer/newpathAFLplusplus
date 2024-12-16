@@ -28,6 +28,23 @@
 
 #define AFL_LLVM_PASS
 
+// WHATWEADD: ------------------------------------------ start
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <map>
+#include <regex>
+#include <cassert>
+#include <sys/file.h>
+#include <cstdarg>
+
+#include "llvm/IR/Function.h"
+#include "llvm/Pass.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/Module.h"
+// WHATWEADD: ------------------------------------------ end
+
 #include "config.h"
 #include "debug.h"
 #include <stdio.h>
@@ -194,6 +211,50 @@ uint64_t PowerOf2Ceil(unsigned in) {
     (LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_PATCH >= 1)
   #define AFL_HAVE_VECTOR_INTRINSICS 1
 #endif
+
+// WHATWEADD: operations on BBID file --------------------------------------------------------------------- start
+int readBBIDfile(FILE *file) {
+    // move file offset to the beginning
+    rewind(file);
+
+    // read an integer from the file
+    int BBID;
+    if (fscanf(file, "%d", &BBID) != 1) {
+        perror("Error reading number from file");
+        fclose(file);
+        assert(0);
+    }
+    return BBID;
+}
+
+void writeBBIDfile(FILE *file, int BBID) {
+    // move file offset to the beginning
+    rewind(file);
+
+    // write an integer to the file
+    if (fprintf(file, "%d", BBID) < 0) {
+        perror("Error writing number to file");
+        fclose(file);
+        assert(0);
+    }
+
+    // flush buffer
+    if (fflush(file) != 0) {
+        perror("Error flushing buffer");
+        fclose(file);
+        assert(0);
+    }
+}
+// WHATWEADD: operations on BBID file --------------------------------------------------------------------- end
+
+// WHATWEADD: operations on file --------------------------------------------------- start
+void writeFile(FILE *file, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(file, fmt, args);
+    va_end(args);
+}
+// WHATWEADD: operations on file --------------------------------------------------- end
 
 #if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
 PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &MAM) {
@@ -1079,6 +1140,224 @@ bool AFLCoverage::runOnModule(Module &M) {
     }
 
   }
+
+    // WHATWEADD: do instrumentation, write CFG file and callmap file ----------------------------------------------------------------------------------------------------- start
+    // if AFL_LLVM_CMPLOG is enabled, we do not instrument
+    char *cmplog_env_var = "AFL_LLVM_CMPLOG";  
+    char *cmplog_value = getenv(cmplog_env_var);
+    if (NULL == cmplog_value) {
+        // instrumentation logic:
+        // instrument 'path_inject_eachbb' at the beginning of every basic block
+        // and after every call instruction
+
+        // relative file operation:
+        // 1. BBID file: stores only an integer, which represents basic block ID
+        // 2. CALLMAP file: format: BBID Calls FuncName (global fun: FuncName, local fun: static ModualeName_FuncName)
+        // 3. CFG file: stores CFG before filtering
+        // These files need to be locked to avoid disruption of parallel compilation
+
+        // First, we create fd for each relative file
+        // their names are indicated by env value
+        char *BBID_filename = getenv("BBIDFILE");
+        char *CALLMAP_filename = getenv("CALLMAPFILE");
+        char *CFG_filename = getenv("CFGFILE");
+        // AFL++ will operate on each .c file once, so they should be set to "append" mode.
+        FILE *callmapfile = fopen(CALLMAP_filename, "a");
+        assert(callmapfile);
+        FILE *cfgfile = fopen(CFG_filename, "a");
+        assert(cfgfile);
+        // If the file does not exist, create the file and write 0 to it.
+        FILE *bbidfile = fopen(BBID_filename, "r+");
+        if(NULL == bbidfile) {
+            bbidfile = fopen(BBID_filename, "w+");
+            assert(bbidfile);
+            writeBBIDfile(bbidfile, 0);
+        }
+        // get fd of these 3 files so we can add locks to them
+        int bbidfd = fileno(bbidfile);
+        int callmap_fd = fileno(callmapfile);
+        int cfg_fd = fileno(cfgfile);
+        // add locks to them
+        assert(flock(bbidfd, LOCK_EX) != -1);
+        assert(flock(callmap_fd, LOCK_EX) != -1);
+        assert(flock(cfg_fd, LOCK_EX) != -1);
+
+        // Add a function declaration for the function to be instrumented: extern void path_inject_eachbb(int);
+        auto &CTX = M.getContext();
+        Type *VoidTy = Type::getVoidTy(CTX);
+        Type *interger32Type = Type::getInt32Ty(CTX);
+        FunctionType *FuncTy_eachbb = FunctionType::get(VoidTy, {interger32Type}, false); 
+        FunctionCallee path_inject_eachbbFunc = M.getOrInsertFunction("path_inject_eachbb", FuncTy_eachbb);
+
+        // We ignore all functions automatically inserted by LLVM. These functions' names start with llvm.*, and we filter them out.
+        std::regex pattern("^llvm\\..*");
+
+        // simulate instrumentation
+        // the motivation for simulation is to calculate successors' BBID after splitting blocks
+        std::map<llvm::BasicBlock*, int> origBB_and_BBID;
+        // before instrumentation, we read BBID from BBIDfile to avoid BBID conflicts
+        int BBID = readBBIDfile(bbidfile);
+        for (auto &F : M) {
+            // if this function is just a declaraton, then skip
+            if (F.isDeclaration())
+                continue;
+            // if this function's name start with llvm.*, then skip
+            if (std::regex_match(F.getName().str(), pattern)) 
+                continue;
+
+            for (auto &BB : F) {
+                // assign each original block a BBID
+                origBB_and_BBID[&BB] = BBID;
+                BBID++; 
+
+                // calculate BBID after splitting blocks
+                for (auto &Inst : BB) {
+                    CallInst* callInst = dyn_cast<CallInst>(&Inst);
+                    // if this instruction is not call instruction, then skip
+                    if (NULL == callInst)
+                        continue;
+                    // get Callee
+                    Function *Callee = callInst->getCalledFunction();
+                    // if this call instruction is indirect call, then just skip
+                    if(!Callee) 
+                        continue;
+                    // if Callee function starts with llvm.*, then skip
+                    if (std::regex_search(Callee->getName().str(), pattern)) 
+                        continue;
+                    // before real instrumentation, there should not be function named "path_inject_eachbb"
+                    assert(Callee->getName() != "path_inject_eachbb");
+
+                    // reaching here means this is a valid call instruction
+                    // we need to split this block to n+2 smaller blocks (n = # call instructions)
+
+                    // so increase BBID by 2
+                    BBID += 2;
+                }
+            }
+        }
+
+        // real instrumentation
+        // before instrumentation, we read BBID from BBIDfile to avoid BBID conflicts
+        BBID = readBBIDfile(bbidfile);
+        // for loop on each function: 1. instrumentation 2. write callmap.txt 3. write cfg.txt
+        for (auto &F : M) {
+            // if this function is just a declaraton, then skip
+            if (F.isDeclaration())
+                continue;
+            // if this function's name start with llvm.*, then skip
+            if (std::regex_match(F.getName().str(), pattern)) 
+                continue;
+
+            // if this function is global, then write "Function: FuncName" to CFG file
+            // if this function is static, then write "static ModuleName_FuncName" to CFG file
+            bool isFuncStatic = F.hasLocalLinkage();
+            std::string FuncName = isFuncStatic ? ("static " + M.getName().str() + "_" + F.getName().str()) : F.getName().str(); 
+            writeFile(cfgfile, "Function: %s\n", FuncName.c_str());
+
+            // for loop instrumentation
+            for (auto &BB : F) {
+                // instrument path_inject_eachbb(int) at the beginning of this block
+                // get the first instruction of the block
+                Instruction* firstInst = &(BB.front());
+                // skip PHI instruction
+                while (PHINode *PHI = dyn_cast<PHINode>(firstInst)) {
+                    firstInst = firstInst->getNextNode();
+                }
+                // skip LandingPad instruction
+                while (isa<LandingPadInst>(firstInst)) {
+                    firstInst = firstInst->getNextNode();
+                }
+                // Create IRBuilder Object
+                IRBuilder<> builder(firstInst);
+                // Create parameters for path_inject_eachbb
+                std::vector<Value*> args;
+                args.push_back(builder.getInt32(BBID));
+                // insert path_inject_eachbb(BBID) functionCall
+                builder.CreateCall(path_inject_eachbbFunc, args);
+
+                // write to CFG file and callmap file
+                writeFile(cfgfile, "BasicBlock: %d\n", BBID);
+                writeFile(callmapfile, "%d\n", BBID);
+
+                // increase BBID
+                BBID++; 
+
+                // insert path_inject_eachbb(int) functionCall after each call instruction
+                for (auto &Inst : BB) {
+                    CallInst* callInst = dyn_cast<CallInst>(&Inst);
+                    // if this instruction is not call instruction, then skip
+                    if (NULL == callInst)
+                        continue;
+                    // get Callee
+                    Function *Callee = callInst->getCalledFunction();
+                    // if this call instruction is indirect call, then just skip
+                    if(!Callee) 
+                        continue;
+                    // if Callee function starts with llvm.*, then skip
+                    if (std::regex_search(Callee->getName().str(), pattern)) 
+                        continue;
+                    // if callee function is "path_inject_eachbb", then skip
+                    if (Callee->getName() == "path_inject_eachbb") 
+                        continue;
+
+                    // reaching here means this is a valid call instruction
+                    // we need to split this block to n+2 smaller blocks (n = # call instructions)
+
+                    // write to cfg file, call instruction itself is a block
+                    writeFile(cfgfile, "Successors: %d\n", BBID);
+                    writeFile(cfgfile, "BasicBlock: %d\n", BBID);
+
+                    // write to callmap file, call instruction itself is a block
+                    bool isCalleeStatic = Callee->hasLocalLinkage();
+                    std::string calleeFuncName = isCalleeStatic ? ("static " + M.getName().str() + "_" + Callee->getName().str()) : Callee->getName().str(); 
+                    writeFile(callmapfile, "%d Calls %s\n", BBID, calleeFuncName.c_str());
+
+                    // call instruction itself is a block, so increase BBID here
+                    BBID++;
+
+                    // then we instrument after this call instruction
+                    // Create IRBuilder Object
+                    IRBuilder<> builder(callInst->getNextNode());
+                    // Create parameters for path_inject_eachbb
+                    std::vector<Value*> args;
+                    args.push_back(builder.getInt32(BBID));
+                    // insert path_inject_eachbb(BBID) functionCall
+                    builder.CreateCall(path_inject_eachbbFunc, args);
+
+                    // Write to cfg file and callmap file
+                    writeFile(cfgfile, "Successors: %d\n", BBID);
+                    writeFile(cfgfile, "BasicBlock: %d\n", BBID);
+                    writeFile(callmapfile, "%d\n", BBID);
+
+                    // increase BBID
+                    BBID++; 
+                }
+
+                // wirte to cfg file the original successors
+                writeFile(cfgfile, "Successors:");
+                for (BasicBlock *Succ : successors(&BB)) {
+                    writeFile(cfgfile, " %d", origBB_and_BBID[Succ]);
+                }
+                writeFile(cfgfile, "\n");
+
+            }
+            writeFile(cfgfile, "\n");
+        }
+
+        // write the final BBID in to BBID file, so next .c file will use it
+        writeBBIDfile(bbidfile, BBID);
+
+        // unlock these three files
+        assert(flock(bbidfd, LOCK_UN) != -1);
+        assert(flock(callmap_fd, LOCK_UN) != -1);
+        assert(flock(cfg_fd, LOCK_UN) != -1);
+
+        // close these three files
+        fclose(bbidfile);
+        fclose(callmapfile);
+        fclose(cfgfile);
+    }
+    // WHATWEADD: do instrumentation, write CFG file and callmap file ----------------------------------------------------------------------------------------------------- end
 
 #if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
   return PreservedAnalyses();

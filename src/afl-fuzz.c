@@ -107,10 +107,15 @@
 extern u64 time_spent_working;
 #endif
 
+// WENOTE: at_exit() is a function called when afl-fuzz exits
 static void at_exit() {
 
   s32   i, pid1 = 0, pid2 = 0, pgrp = -1;
-  char *list[4] = {SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // char *list[4] = {SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // WHATWEADD: add PATH_SHM_ENV_VAR, to delete this shm when afl-fuzz exits ---------------------- start
+  char *list[5] = {SHM_ENV_VAR, PATH_SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR, NULL};
+  // WHATWEADD: add PATH_SHM_ENV_VAR, to delete this shm when afl-fuzz exits ---------------------- end
+
   char *ptr;
 
   ptr = getenv("__AFL_TARGET_PID2");
@@ -540,9 +545,36 @@ static void fasan_check_afl_preload(char *afl_preload) {
 
 }
 
+// WHATWEADD: include path-reduction related APIs ---------------- start
+#include <path_reduction.h>
+#include <cfgbinary.h>
+
+// path_reducer, global variable, which is used by all code
+PathReducer* path_reducer;
+// WHATWEADD: include path-reduction related APIs ---------------- end
+
 /* Main entry point */
 
 int main(int argc, char **argv_orig, char **envp) {
+
+  // WHATWEADD: loading CFG, get K environment variable, and get path_reducer ------------------------------------- start
+  // Top_Level stores read CFG binary
+  Top_Level *top = NULL;
+  // get path of CFG binary
+  const char* cfg_filepath = getenv("CFG_BIN_FILE");
+  // loading CFG binary
+  printf("loading CFG binary: %s .......\n", cfg_filepath);
+  top = load_top(cfg_filepath);
+  // get K environment variable
+  char *k = getenv("K");
+  int K = 1; // K == 1 by default
+  if (k != NULL) {
+    K = atoi(k);
+  }
+  // get path_reducer
+  printf("generating path reducer .......\n");
+  path_reducer = get_path_reducer(top, K);
+  // WHATWEADD: loading CFG, get K environment variable, and get path_reducer ------------------------------------- end
 
   s32 opt, auto_sync = 0 /*, user_set_cache = 0*/;
   u64 prev_queued = 0;
@@ -2018,6 +2050,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   get_core_count(afl);
 
+  // WENOTE: atexit: Register a function to be called when `exit' is called. 
   atexit(at_exit);
 
   setup_dirs_fds(afl);
@@ -2485,6 +2518,11 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->argv = use_argv;
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+  // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+  // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+  afl->fsrv.path_trace_bits = afl->shm.path_map;
+  afl->fsrv.path_map_size   = afl->shm.path_map_size;
+  // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
@@ -2537,6 +2575,12 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.map_size = new_map_size;
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+      afl->fsrv.path_trace_bits = afl->shm.path_map;
+      afl->fsrv.path_map_size   = afl->shm.path_map_size;
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
+
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
@@ -2617,6 +2661,12 @@ int main(int argc, char **argv_orig, char **envp) {
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      // WENOTE: afl_shm_init() initializes shared memory, we change it to initilize path-shm
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- start
+      afl->fsrv.path_trace_bits = afl->shm.path_map;
+      afl->fsrv.path_map_size   = afl->shm.path_map_size;
+      // WHATWEADD: 把 afl->shm 里的 path_map 赋值给 afl->fsrv 的 path_tracebits ----------------- end
+
       afl->cmplog_fsrv.trace_bits = afl->fsrv.trace_bits;
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
@@ -3260,6 +3310,15 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
 stop_fuzzing:
+
+  // WHATWEADD: free path reducer and CFG binary ------------------------------ start
+  printf("free path reducer .........\n");
+  free_path_reducer(path_reducer);
+  path_reducer = NULL;
+  printf("free CFG binary .........\n");
+  top_free(top);
+  top = NULL;
+  // WHATWEADD: free path reducer and CFG binary ------------------------------ end
 
   afl->force_ui_update = 1;  // ensure the screen is reprinted
   afl->stop_soon = 1;        // ensure everything is written

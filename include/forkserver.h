@@ -104,6 +104,10 @@ typedef struct afl_forkserver {
   /* a program that includes afl-forkserver needs to define these */
 
   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
+  // WHATWEADD: path-SHM corresponding property ---------------- start
+  u32 *path_trace_bits;                       
+  u32 path_map_size;
+  // WHATWEADD: path-SHM corresponding property ---------------- end
 
   s32 fsrv_pid,                         /* PID of the fork server           */
       child_pid,                        /* PID of the fuzzed program        */
