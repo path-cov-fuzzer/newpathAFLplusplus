@@ -1233,6 +1233,13 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
   // does not care about path if stage is "calibration", "colorization" or "trim"
   if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
 
+    // printf("========================== unreduced path start ==============================\n");
+    // for(u32 i = 1; i <= afl->fsrv.path_trace_bits[0]; i++) {
+    //   printf("%u ", afl->fsrv.path_trace_bits[i]);
+    // }
+    // printf("\n");
+    // printf("========================== unreduced path end ==============================\n");
+
     // means the length of the reduced path
     int out_len = -1;
     // points to the reduced path
@@ -1246,11 +1253,22 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
     // path reduction
     reduced_path = reduce_path1(path_reducer, path_shm_ptr_to_1, afl->fsrv.path_trace_bits[0], 0, &out_len); 
 
+    // printf("========================== reduced path start ==============================\n");
+    // for(u32 i = 0; i < out_len; i++) {
+    //   printf("%u ", reduced_path[i]);
+    // }
+    // printf("\n");
+    // printf("========================== reduced path end ==============================\n");
+
     // reduced_path must be shorter than original path
     assert(out_len <= afl->fsrv.path_trace_bits[0]);
 
     // hash path
     sha256(reduced_path, trace_hash, out_len);
+
+    // free the reduced_path
+    extern void free_boxed_array(int* ptr, size_t len);
+    free_boxed_array(reduced_path, out_len);
 
   }
   // WHATWEADD: convert path to hash for future comparison ---------------------------------------------------------------- end

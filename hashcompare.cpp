@@ -20,6 +20,10 @@ bool hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
     hash[2 * SHA256_DIGEST_LENGTH] = '\0';
     std::string thehashstr(hash);
 
+	// std::cout << "================== start =====================" << std::endl;
+	// std::cout << thehashstr << std::endl;
+	// std::cout << "================== end =====================" << std::endl;
+
     // judge whether thehashstr is in hashPool
     // if thehashstr does not exist in hashPool, then it is interesting
     if (hashPool.find(thehashstr) == hashPool.end()) {
