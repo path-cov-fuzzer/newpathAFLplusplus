@@ -530,6 +530,9 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
     }
 
     // WHATWEADD: if path hash is unique, then store this seed ---------------------------------------- start
+    // store currenct newbits and restore it after AFL++ keeps seed
+    // we want new_bits modification only affects seeds generation
+    u8 stored_new_bits = new_bits;
     // does not care about path if stage is "calibration", "colorization" or "trim"
     if( 0 != strcmp(afl->stage_name, "calibration") && 0 != strcmp(afl->stage_name, "colorization") && 0 != strncmp(afl->stage_name, "trim", 4) ) {
         // trace_hash should has been set in common_fuzz_stuff
@@ -592,6 +595,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
     }
 
     add_to_queue(afl, queue_fn, len, 0);
+
+    // WHATWEADD: restore newbits to avoid further affection ----------------------------------- start
+    new_bits = stored_new_bits;
+    // WHATWEADD: restore newbits to avoid further affection ----------------------------------- end
 
     if (unlikely(afl->fuzz_mode) &&
         likely(afl->switch_fuzz_mode && !afl->non_instrumented_mode)) {
