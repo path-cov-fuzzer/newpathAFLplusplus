@@ -64,6 +64,8 @@ wholeCFG[firstBBID] = [False, singleCFG]
 # indicate whether is looking for "path_inject_eachbb"
 lookingForInstrumented = False 
 with open(sys.argv[2], 'r', encoding='utf-8') as file:
+    # record last line of the last line
+    previousline2 = None
     # record last line of the current reading line
     previousline = None
     # read each line of PUT_decomp.txt
@@ -85,14 +87,21 @@ with open(sys.argv[2], 'r', encoding='utf-8') as file:
                 print("current line == 'path_inject_eachbb' !")
                 xor_match = re.search(r'xor\s+%edi,%edi', previousline)
                 mov_match = re.search(r'mov\s+\$(0x[0-9a-fA-F]+),%edi', previousline)
-                assert(xor_match or mov_match)
-                assert(not (xor_match and mov_match))
-                if xor_match:
+                xor_match2 = re.search(r'xor\s+%edi,%edi', previousline2)
+                mov_match2 = re.search(r'mov\s+\$(0x[0-9a-fA-F]+),%edi', previousline2)
+                assert(xor_match or mov_match or xor_match2 or mov_match2)
+                assert(not (xor_match and mov_match and xor_match2 and mov_match2))
+                if xor_match or xor_match2:
                     # if previousline == "xor    %edi,%edi", then arg = 0
                     arg = 0
-                else:
+                elif mov_match:
                     # if previousline == "mov    $0x3208,%edi", then arg = 0x3208
                     arg = int(mov_match.group(1), 16)
+                elif mov_match2:
+                    # if previousline == "mov    $0x3208,%edi", then arg = 0x3208
+                    arg = int(mov_match2.group(1), 16)
+                else:
+                    assert(0)
                 print(f"arg: {arg}")
                 # set corresponding singleCFG in wholeCFG as True
                 wholeCFG[arg][0] = True
@@ -105,6 +114,8 @@ with open(sys.argv[2], 'r', encoding='utf-8') as file:
             # readching here means the first 'path_inject_eachbb' of this function has been found
             # just skip this line, until we met next funciton head
             pass
+        # record this line, so that previousline2 == "mov    $0x3208,%edi" when previousline == "vzeroupper"
+        previousline2 = previousline
         # record this line, so that previousline == "mov    $0x3208,%edi" when line == "callq path_inject_eachbb"
         previousline = line
     file.close()
