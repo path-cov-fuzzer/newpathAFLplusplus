@@ -1246,7 +1246,10 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
     BlockID *reduced_path = NULL;
 
     // path length must be greater than 0 
-    assert(afl->fsrv.path_trace_bits[0] > 0);
+    if (afl->fsrv.path_trace_bits[0] <= 0) {
+        printf("cyherr: afl->fsrv.path_trace_bits[0] = %u\n", afl->fsrv.path_trace_bits[0]);
+        assert(0);
+    }
 
     // get u32* pointer of the path beginning
     u32 *path_shm_ptr_to_1 = &(afl->fsrv.path_trace_bits[1]);   
