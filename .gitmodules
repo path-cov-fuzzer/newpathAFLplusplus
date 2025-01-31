@@ -25,6 +25,3 @@
 [submodule "nyx_mode/QEMU-Nyx"]
 	path = nyx_mode/QEMU-Nyx
 	url = https://github.com/nyx-fuzz/QEMU-Nyx
-[submodule "fuzzing_support/path-cov"]
-	path = fuzzing_support/path-cov
-	url = https://github.com/fEst1ck/path-cov.git
