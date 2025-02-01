@@ -1169,7 +1169,7 @@ bool AFLCoverage::runOnModule(Module &M) {
         int fake_fd = open("/tmp/pathfuzzer_lock", O_RDWR);
         assert(fake_fd != -1);
         // blocking acquire lock
-        assert(lock_file(fd, F_WRLCK) != -1);
+        assert(lock_file(fake_fd, F_WRLCK) != -1);
 
         // instrumentation logic:
         // instrument 'path_inject_eachbb' at the beginning of every basic block
@@ -1372,7 +1372,7 @@ bool AFLCoverage::runOnModule(Module &M) {
         fclose(cfgfile);
 
         // release big lock
-        assert(lock_file(fd, F_UNLCK) != -1);
+        assert(lock_file(fake_fd, F_UNLCK) != -1);
         close(fake_fd);
     }
     // WHATWEADD: do instrumentation, write CFG file and callmap file ----------------------------------------------------------------------------------------------------- end
