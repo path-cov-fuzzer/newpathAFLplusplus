@@ -1166,7 +1166,7 @@ bool AFLCoverage::runOnModule(Module &M) {
     char *cmplog_value = getenv(cmplog_env_var);
     if (NULL == cmplog_value) {
         // below operations should be limited to only 1 thread
-        int fake_fd = open("/tmp/pathfuzzer_lock", O_RDWR);
+        int fake_fd = open("/tmp/pathfuzzer_lock", O_WRONLY | O_CREAT | O_TRUNC, 0644);
         assert(fake_fd != -1);
         // blocking acquire lock
         assert(lock_file(fake_fd, F_WRLCK) != -1);
