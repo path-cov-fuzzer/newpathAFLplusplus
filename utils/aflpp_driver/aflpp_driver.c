@@ -446,6 +446,8 @@ __attribute__((weak)) int LLVMFuzzerRunDriver(
         memset(__afl_area_ptr, 0, __afl_map_size);
         __afl_area_ptr[0] = 1;
 
+        c_clear_hashPool();
+
       }
 
     }
