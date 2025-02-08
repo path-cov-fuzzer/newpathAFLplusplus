@@ -23,10 +23,10 @@ CFLAGS := -O3 -funroll-loops -g -fPIC
 all:	libAFLDriver.a libAFLQemuDriver.a aflpp_qemu_driver_hook.so
 
 aflpp_driver.o:	aflpp_driver.c
-	-$(CC) -I. -I../../include $(CFLAGS) -c aflpp_driver.c
+	-$(CC) -I. -I../../include $(CFLAGS) -c aflpp_driver.c -lhashcompare
 
 libAFLDriver.a:	aflpp_driver.o
-	@ar rc libAFLDriver.a aflpp_driver.o ../../hashcompare.o
+	@ar rc libAFLDriver.a aflpp_driver.o
 	@cp -vf libAFLDriver.a ../../
 
 debug:
