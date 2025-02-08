@@ -39,6 +39,7 @@ with open(sys.argv[2], 'r', encoding='utf-8') as file:
         line = line.strip()
         # parse the BBID of this line
         bbid_match = re.search(r'(\d+).*', line)
+        print(line)
         bbid = int(bbid_match.group(1))
         # if BBID exits in bbdict, then dump this line to "callmap_filtered.txt"
         if bbid in bbdict:
