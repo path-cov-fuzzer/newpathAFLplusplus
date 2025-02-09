@@ -3,14 +3,15 @@
 #include <unordered_set>
 #include <cassert>
 #include <cstdint>
+#include "hashcompare.h"
 
 std::unordered_set<std::string> hashPool;
 
-void clear_hashPool() {
-    hashPool.clear();
-}
-
 bool hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
+    if (__path_afl__should_clear_hashPool) {
+        hashPool.clear();
+        __path_afl__should_clear_hashPool = 0;
+    }
     // indicate whether this hash is unique
     bool interesting = false;
 
@@ -47,9 +48,5 @@ extern "C" {
 // interface to C language
 bool c_hashcompare(unsigned char trace_hash[SHA256_DIGEST_LENGTH]) {
     return hashcompare(trace_hash);
-}
-
-void c_clear_hashPool() {
-    clear_hashPool();
 }
 }
