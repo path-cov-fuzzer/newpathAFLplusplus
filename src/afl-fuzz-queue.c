@@ -709,7 +709,7 @@ static u8 check_if_text(afl_state_t *afl, struct queue_entry *q) {
 
 /* Append new test case to the queue. */
 
-void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det) {
+void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det, bool is_path) {
 
   struct queue_entry *q =
       (struct queue_entry *)ck_alloc(sizeof(struct queue_entry));
@@ -723,6 +723,7 @@ void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det) {
   q->mother = afl->queue_cur;
   q->weight = 1.0;
   q->perf_score = 100;
+  q->is_path = is_path;
 
 #ifdef INTROSPECTION
   q->bitsmap_size = afl->bitsmap_size;

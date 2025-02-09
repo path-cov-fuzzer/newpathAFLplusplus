@@ -594,7 +594,7 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
 
     }
 
-    add_to_queue(afl, queue_fn, len, 0);
+    add_to_queue(afl, queue_fn, len, 0, new_bits == 3 ? 1 : 0);
 
     // WHATWEADD: restore newbits to avoid further affection ----------------------------------- start
     new_bits = stored_new_bits;
