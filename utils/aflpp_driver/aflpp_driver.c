@@ -64,8 +64,6 @@ extern "C" {
   #include "hash.h"
 #endif
 
-#include "../../hashcompare.h"
-
 // AFL++ shared memory fuzz cases
 int                   __afl_sharedmem_fuzzing = 1;
 extern unsigned int  *__afl_fuzz_len;
@@ -429,8 +427,6 @@ __attribute__((weak)) int LLVMFuzzerRunDriver(
           memset(__afl_area_ptr, 0, __afl_map_size);
           __afl_area_ptr[0] = 1;
 
-          __path_afl__should_clear_hashPool = 1;
-
         }
 
       }
@@ -445,8 +441,6 @@ __attribute__((weak)) int LLVMFuzzerRunDriver(
 
         memset(__afl_area_ptr, 0, __afl_map_size);
         __afl_area_ptr[0] = 1;
-
-        __path_afl__should_clear_hashPool = 1;
 
       }
 
