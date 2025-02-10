@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 # enter FUZZER dir
-export FUZZER="/data/cse12132329/newpathAFLplusplus"
+export FUZZER=$(pwd)
 cd $FUZZER
 
 # get path_reduction module
@@ -20,6 +20,7 @@ ar rcs libhashcompare.a hashcompare.o
 # -lhashcompare: use hashcompare.cpp
 # -lstdc++: when use gcc/clang link .o files. If some .o files is compiled from C++, then -lstdc++ is necessary to link these files.
 # -lpath_reduction: use libpath_reduction.so
-LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e source-only
-sudo LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e install
+#LLVM_CONFIG=llvm-config-18 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e source-only
+LLVM_CONFIG=llvm-config-18 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -C utils/aflpp_driver
+sudo LLVM_CONFIG=llvm-config-18 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e install
 

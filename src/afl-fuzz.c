@@ -3207,13 +3207,41 @@ int main(int argc, char **argv_orig, char **envp) {
 
           }
 
-          do {
+          u32 path_entry = 0;
+          bool path_entry_set = false;
 
-            afl->current_entry = select_next_queue_entry(afl);
+          while (1) {
+            while (unlikely(afl->current_entry < afl->queued_items &&
+                            afl->queue_buf[afl->current_entry]->disabled)) {
+              ++afl->current_entry;
+            }
+            if (!path_entry_set) {
+              path_entry = afl->current_entry;
+              path_entry_set = true;
+            }
+            
+            if (unlikely(!afl->queue_buf[afl->current_entry]->is_path)) {
+              break;
+            }
+          }
 
-          } while (unlikely(afl->current_entry >= afl->queued_items));
+          if (afl->current_entry >= afl->queued_items) {
+            if (path_entry_set && path_entry < afl->queued_items) {
+              afl->current_entry = path_entry;
+            } else {
+              afl->current_entry = 0;
+            }
+          }
 
           afl->queue_cur = afl->queue_buf[afl->current_entry];
+
+          // do {
+
+          //   afl->current_entry = select_next_queue_entry(afl);
+
+          // } while (unlikely(afl->current_entry >= afl->queued_items));
+
+          // afl->queue_cur = afl->queue_buf[afl->current_entry];
 
         }
 
