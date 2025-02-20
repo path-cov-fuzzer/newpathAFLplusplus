@@ -37,6 +37,11 @@
 #include <cassert>
 #include <sys/file.h>
 #include <cstdarg>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
@@ -255,6 +260,20 @@ void writeFile(FILE *file, const char *fmt, ...) {
     va_end(args);
 }
 // WHATWEADD: operations on file --------------------------------------------------- end
+
+// WHATWEADD: functions adding locks on file --------------------------------------------------- start
+int lock_file(int fd, int type) {
+    struct flock fl;
+    fl.l_type = type;     // F_RDLCK 或 F_WRLCK
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;         // 锁定整个文件
+    fl.l_pid = getpid();  // 可选，设置拥有锁的进程 ID
+
+    // F_SETLKW 是阻塞版本的锁请求
+    return fcntl(fd, F_SETLKW, &fl);
+}
+// WHATWEADD: functions adding locks on file --------------------------------------------------- end
 
 #if LLVM_VERSION_MAJOR >= 11                        /* use new pass manager */
 PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &MAM) {
@@ -1146,6 +1165,12 @@ bool AFLCoverage::runOnModule(Module &M) {
     char *cmplog_env_var = "AFL_LLVM_CMPLOG";  
     char *cmplog_value = getenv(cmplog_env_var);
     if (NULL == cmplog_value) {
+        // below operations should be limited to only 1 thread
+        int fake_fd = open("/tmp/pathfuzzer_lock", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        assert(fake_fd != -1);
+        // blocking acquire lock
+        assert(lock_file(fake_fd, F_WRLCK) != -1);
+
         // instrumentation logic:
         // instrument 'path_inject_eachbb' at the beginning of every basic block
         // and after every call instruction
@@ -1156,7 +1181,7 @@ bool AFLCoverage::runOnModule(Module &M) {
         // 3. CFG file: stores CFG before filtering
         // These files need to be locked to avoid disruption of parallel compilation
 
-        // First, we create fd for each relative file
+        // First, we open each relative file
         // their names are indicated by env value
         char *BBID_filename = getenv("BBIDFILE");
         char *CALLMAP_filename = getenv("CALLMAPFILE");
@@ -1173,14 +1198,6 @@ bool AFLCoverage::runOnModule(Module &M) {
             assert(bbidfile);
             writeBBIDfile(bbidfile, 0);
         }
-        // get fd of these 3 files so we can add locks to them
-        int bbidfd = fileno(bbidfile);
-        int callmap_fd = fileno(callmapfile);
-        int cfg_fd = fileno(cfgfile);
-        // add locks to them
-        assert(flock(bbidfd, LOCK_EX) != -1);
-        assert(flock(callmap_fd, LOCK_EX) != -1);
-        assert(flock(cfg_fd, LOCK_EX) != -1);
 
         // Add a function declaration for the function to be instrumented: extern void path_inject_eachbb(int);
         auto &CTX = M.getContext();
@@ -1256,6 +1273,8 @@ bool AFLCoverage::runOnModule(Module &M) {
 
             // for loop instrumentation
             for (auto &BB : F) {
+                // check that what we simulated above is the same as the BBID it will actually get
+                assert(origBB_and_BBID[&BB] == BBID);
                 // instrument path_inject_eachbb(int) at the beginning of this block
                 // get the first instruction of the block
                 Instruction* firstInst = &(BB.front());
@@ -1347,15 +1366,14 @@ bool AFLCoverage::runOnModule(Module &M) {
         // write the final BBID in to BBID file, so next .c file will use it
         writeBBIDfile(bbidfile, BBID);
 
-        // unlock these three files
-        assert(flock(bbidfd, LOCK_UN) != -1);
-        assert(flock(callmap_fd, LOCK_UN) != -1);
-        assert(flock(cfg_fd, LOCK_UN) != -1);
-
         // close these three files
         fclose(bbidfile);
         fclose(callmapfile);
         fclose(cfgfile);
+
+        // release big lock
+        assert(lock_file(fake_fd, F_UNLCK) != -1);
+        close(fake_fd);
     }
     // WHATWEADD: do instrumentation, write CFG file and callmap file ----------------------------------------------------------------------------------------------------- end
 
