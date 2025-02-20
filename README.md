@@ -18,7 +18,7 @@ export BBIDFILE=$(pwd)/bbid.txt
 export CALLMAPFILE=$(pwd)/callmap.txt
 export CFGFILE=$(pwd)/cfg.txt
 export AFL_LLVM_CALLER=1
-export LD_LIBRARY_PATH=$(pwd)
+export LD_LIBRARY_PATH=$(pwd)/..
 afl-clang-fast++ example.cc -o example
 ```
 
@@ -37,7 +37,14 @@ now we get top.bin
 
 Run below start fuzzing
 ```bash
-TODO: here
+# solve the /proc/sys/kernel/core_pattern problem
+export AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
+# pathfuzz relative settings
+export CFG_BIN_FILE="top.bin"
+# 42 is a new algorithm
+export K=42
+
+afl-fuzz -i input_dir -o output_dir -- ./example @@
 ```
 
 ---
