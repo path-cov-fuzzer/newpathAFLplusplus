@@ -10,14 +10,14 @@ ar rcs libhashcompare.a hashcompare.o
 # -lhashcompare: use hashcompare.cpp
 # -lstdc++: when use gcc/clang link .o files. If some .o files is compiled from C++, then -lstdc++ is necessary to link these files.
 # -lpath_reduction: use libpath_reduction.so
-LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -j$(nproc)
+LLVM_CONFIG=llvm-config-18 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -j$(nproc)
 
 # aflpp_driver is not changed, so its compilation process does not have to change
 export CC=clang
 export CXX=clang++
 export AFL_NO_X86=1
 export PYTHON_INCLUDE=/
-LLVM_CONFIG=llvm-config-17 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -C utils/aflpp_driver || exit 1
+LLVM_CONFIG=llvm-config-18 LD_LIBRARY_PATH="$(pwd)" CFLAGS="-I$(pwd)/fuzzing_support" LDFLAGS="-L$(pwd) -lcrypto -lhashcompare -lstdc++ -lpath_reduction" make -e -C utils/aflpp_driver || exit 1
 
 popd
 

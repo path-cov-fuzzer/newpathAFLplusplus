@@ -3212,6 +3212,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
           }
 
+          u32 path_entry = 0;
+          bool path_entry_set = false;
+
           while (1) {
             while (unlikely(afl->current_entry < afl->queued_items &&
                             afl->queue_buf[afl->current_entry]->disabled)) {
