@@ -2978,6 +2978,9 @@ int main(int argc, char **argv_orig, char **envp) {
                           afl->queue_buf[afl->current_entry]->disabled)) {
             ++afl->current_entry;
           }
+          if (afl->current_entry >= afl->queued_items) {
+            break;
+          }
           if (!path_entry_set) {
             path_entry = afl->current_entry;
             path_entry_set = true;
@@ -2986,6 +2989,8 @@ int main(int argc, char **argv_orig, char **envp) {
           if (unlikely(!afl->queue_buf[afl->current_entry]->is_path)) {
             break;
           }
+
+          ++afl->current_entry;
         }
 
         if (afl->current_entry >= afl->queued_items) {
@@ -3207,22 +3212,22 @@ int main(int argc, char **argv_orig, char **envp) {
 
           }
 
-          u32 path_entry = 0;
-          bool path_entry_set = false;
-
           while (1) {
             while (unlikely(afl->current_entry < afl->queued_items &&
                             afl->queue_buf[afl->current_entry]->disabled)) {
               ++afl->current_entry;
             }
+            if (afl->current_entry >= afl->queued_items) { break; }
             if (!path_entry_set) {
               path_entry = afl->current_entry;
               path_entry_set = true;
             }
-            
+
             if (unlikely(!afl->queue_buf[afl->current_entry]->is_path)) {
               break;
             }
+
+            ++afl->current_entry;
           }
 
           if (afl->current_entry >= afl->queued_items) {
